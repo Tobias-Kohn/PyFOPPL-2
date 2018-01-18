@@ -6,13 +6,89 @@
 # 20. Dec 2017, Tobias Kohn
 # 18. Jan 2018, Tobias Kohn
 #
-from . import Options
-from .foppl_distributions import discrete_distributions, continuous_distributions
+"""
+# PyFOPPL: Vertices and Graph
 
-_LAMBDA_PATTERN_ = "lambda state: {}"
+The graph and its vertices, as provided in this module, form the backbone of the graphical model.
+
+## The Graphical Model
+
+The probabilistic model is compiled into a graph, where each vertex corresponds to the sampling of a distribution, or
+an observation of a stochastic value, respectively. Any dependencies between these stochastic vertices are captured by
+the edges (called `arcs`). Consider the (abstract) example:
+```
+x1 = sample(normal(0, 1))
+x2 = sample(normal(x1, 4))
+x = x1 + x2 / 2
+y = observe(normal(x, 1), 3)
+```
+Here, we have three vertices: `x1` and `x2` are sampled values, and the third vertex is the observation `y` on the last
+line. Obviously, `x2` depends on `x1`, and `y` depends on both `x1` and `x2`. The value `x` is not a vertex as it does
+not do any sampling or observation on its own. The graphical model then looks as follows:
+
+  [x1] --> [x2]
+    \     /
+     \   /
+      v v
+      [y]
+
+The variable `x` is eliminated during the compilation process and completely inlined into `y`.
+
+## The Graph Around the Graphical Model
+
+In addition to the vertices above, there are additional nodes, which are not part of the graphical model itself. On the
+one hand, we put data items (vectors/lists/tables/tensors) into data nodes to simplify the generated code, and not
+having to inline large amounts of data. On the other hand, conditional `if`-statements are also expressed as special
+nodes.
+
+In other words: we embed the graphical model with its vertices and arcs into a graph of additional nodes and edges.
+Each node is a fully fledged object of its own, providing a rich set of information for further analysis.
+
+## Computation
+
+The actual computation associated with any node is encoded in a `evaluate(state)` function. Here, the `state` is a
+dictionary holding variables, in particular the values computed by other nodes. The example above is -- in principle --
+rewritten to:
+```
+state['x1'] = dist.Normal(0, 1).sample()
+state['x2'] = dist.Normal(state['x1'], 4).sample()
+state['y'] = 3   # The observed value
+```
+Using the `state`-dictionary allows us to carry the state across different nodes and complete the entire computation.
+In addition, the model can also compute the log-pdf by a rewrite as follows (based upon a prior sampling to compute
+initial values for the variables in the `state`-dictionary):
+```
+log_pdf = 0.0
+log_pdf += dist.Normal(0, 1).log_pdf(state['x1'])
+log_pdf += dist.Normal(state['x1'], 4).log_pdf(state['x2'])
+log_pdf += dist.Normal((state['x1'] + state['x2'])/2, 1).log_pdf(3)
+```
+Both computations are facilitated by the methods `update` and `update_pdf` of the node.
+"""
+from . import Options
+from .foppl_distributions import distributions
+
+
+####################################################################################################3
 
 class GraphNode(object):
     """
+    The base class for all nodes, including the actual graph vertices, but also conditionals, data, and possibly
+    parameters.
+
+    Each node has a name, which is usually generated automatically. The generation of the name is based on a simple
+    counter. This generated name (i.e. the counter value inside the name) is used later on to impose a compute order
+    on the nodes (see the method `get_ordered_list_of_all_nodes` in the `graph`). Hence, you should not change the
+    naming scheme unless you know exactly what you are doing!
+
+    The set of ancestors provides the edges for the graph and the graphical model, respectively. Note that all
+    ancestors are always vertices. Conditions, parameters, data, etc. are hold in other fields. This ensures that by
+    looking at the ancestors of vertices, we get the pure graphical model.
+
+    Finally, the methods `evaluate`, `update` and `update_pdf` are used by the model to sample values and compute
+    log-pdf, etc. Of course, `evaluate` is just a placeholder here so as to define a minimal interface. Usually, you
+    will use `update` and `update_pdf` instead of `evaluate`. However, given a `state`-dictionary holding all the
+    necessary values, it is save to call `evaluate`.
     """
 
     name = ""
@@ -38,9 +114,21 @@ class GraphNode(object):
         return 0.0
 
 
+####################################################################################################3
+
+# This is used to generate the various `evaluate`-methods later on.
+_LAMBDA_PATTERN_ = "lambda state: {}"
+
+
 class ConditionNode(GraphNode):
     """
-    Condition
+    A `ConditionNode` represents a condition that depends on stochastic variables (vertices). It is not directly
+    part of the graphical model, but you can think of conditions to be attached to a specific vertex.
+
+    Usually, we try to transform all conditions into the form `f(state) >= 0` (this is not possible for `f(X) == 0`,
+    through). However, if the condition satisfies this format, the node object has an associated `function`, which
+    can be evaluated on its own. In other words: you can not only check if a condition is `True` or `False`, but you
+    can also gain information about the 'distance' to the 'border'.
     """
 
     def __init__(self, *, name:str=None, condition=None, ancestors:set=None, op:str='?', function=None):
@@ -75,7 +163,13 @@ class ConditionNode(GraphNode):
         else:
             result = "???"
         ancestors = ', '.join([v.name for v in self.ancestors])
-        return "{}:\n\tAncestors: {}\n\tCondition: {}".format(self.name, ancestors, result)
+        result = "{}:\n\tAncestors: {}\n\tCondition: {}".format(self.name, ancestors, result)
+        if Options.debug:
+            result += "\n\tRelation: {}".format(self.op)
+            result += "\n\tCode:          {}".format(self.code)
+            if self.function:
+                result += "\n\tFunction-Code: {}".format(self.function_code)
+        return result
 
     @property
     def has_function(self):
@@ -94,7 +188,8 @@ class ConditionNode(GraphNode):
 
 class DataNode(GraphNode):
     """
-    Data
+    Data nodes bear virtually no importance, but help keep large data sets out of the code. A data node never
+    depends on anything else, but only provides a constant value.
     """
 
     def __init__(self, *, name:str=None, data):
@@ -112,7 +207,11 @@ class DataNode(GraphNode):
 
 class Parameter(GraphNode):
     """
-    A parameter
+    Currently, parameter are not fully supported, yet.
+
+    Parameter nodes are very similar to data nodes in that they just provide a simple constant value, and do not
+    depend on any other nodes. The difference is, however, that parameter nodes should allow to change their values
+    upon intervention from the outside.
     """
 
     def __init__(self, *, name:str=None, value):
@@ -130,11 +229,50 @@ class Parameter(GraphNode):
 
 class Vertex(GraphNode):
     """
-    A vertex in the graph
+    Vertices play the crucial and central role in the graphical model. Each vertex represents either the sampling from
+    a distribution, or the observation of such a sampled value.
+
+    You can get the entire graphical model by taking the set of vertices and their `ancestors`-fields, containing all
+    vertices, upon which this vertex depends. However, there is a plethora of additional fields, providing information
+    about the node and its relationship and status.
+
+    `name`:
+      The generated name of the vertex. See also: `original_name`.
+    `original_name`:
+      In contrast to the `name`-field, this field either contains the name attributed to this value in the original
+      code, or `None`.
+    `ancestors`:
+      The set of all parent vertices. This contains only the ancestors, which are in direct line, and not the parents
+      of parents. Use the `get_all_ancestors()`-method to retrieve a full list of all ancestors (including parents of
+      parents of parents of ...).
+    `data`:
+      A set of all data nodes, which provide data used in this vertex.
+    `distribution`:
+      The distribution is an AST/IR-structure, which is usually not used directly, but rather for internal purposes,
+      such as extracting the name and type of the distribution.
+    `distribution_name`:
+      The name of the distribution, such as `Normal` or `Gamma`.
+    `distribution_type`:
+      Either `continuous` or `discrete`. You will usually query this field using one of the properties
+      `is_continuous` or `is_discrete`.
+    `observation`:
+      The observation in an AST/IR-structure, which is usually not used directly, but rather for internal purposes.
+    `conditions`:
+      The set of all conditions under which this vertex is evaluated. Each item in the set is actually a tuple of
+      a `ConditionNode` and a boolean value, to which the condition should evaluate. Note that the conditions are
+      not owned by a vertex, but might be shared across several vertices.
+    `dependent_conditions`:
+      The set of all conditions that depend on this vertex. In other words, all conditions which contain this
+      vertex in their `get_all_ancestors`-set.
+    `sample_size`:
+      The dimension of the samples drawn from this distribution.
+    `code`:
+      The original code for the `evaluate`-method as a string. This is mostly used for debugging.
     """
 
     def __init__(self, *, name:str=None, ancestors:set=None, data:set=None, distribution=None, observation=None,
                  ancestor_graph=None, conditions:list=None):
+        from . import code_types
         if name is None:
             name = self.__class__.__gen_symbol__('y' if observation else 'x')
         if ancestor_graph:
@@ -149,6 +287,7 @@ class Vertex(GraphNode):
         if conditions is None:
             conditions = []
         self.name = name
+        self.original_name = None
         self.ancestors = ancestors
         self.data = data
         self.distribution = distribution
@@ -156,12 +295,9 @@ class Vertex(GraphNode):
         self.conditions = conditions
         self.dependent_conditions = set()
         self.distribution_name = distribution.name
-        if distribution.name in continuous_distributions:
-            self.distribution_type = 'continuous'
-        elif distribution.name in discrete_distributions:
-            self.distribution_type = 'discrete'
-        else:
-            self.distribution_type = 'unknown'
+        self.distribution_type = distributions.get(distribution.name, 'unknown')
+        code_type = self.distribution.code_type
+        self.sample_size = code_type.size if isinstance(code_type, code_types.ListType) else 1
         self.code = _LAMBDA_PATTERN_.format(self.distribution.to_py())
         self.evaluate = eval(self.code)
         if self.observation:
@@ -182,6 +318,14 @@ class Vertex(GraphNode):
             result += "\tConditions: {}\n".format(', '.join(["{} == {}".format(c.name, v) for c, v in self.conditions]))
         if self.observation:
             result += "\tObservation: {}\n".format(repr(self.observation))
+        if Options.debug:
+            result += "\tDependent Conditions: {}\n".format(', '.join(sorted([c.name for c in self.dependent_conditions])))
+            result += "\tDistr-Type: {}\n\tOriginal-Name: {}\n\tCode: {}\n\tSample-Size: {}\n".format(
+                self.distribution_type,
+                self.original_name if self.original_name else "-",
+                self.code,
+                self.sample_size
+            )
         return result
 
     def _add_dependent_condition(self, cond: ConditionNode):
@@ -242,9 +386,11 @@ class Vertex(GraphNode):
         return log_pdf
 
 
+####################################################################################################3
+
 class Graph(object):
     """
-    The graph
+    The graph is mostly a set of vertices, and it is used in order to create the graphical model inside the compiler.
     """
 
     EMPTY = None
@@ -292,6 +438,15 @@ class Graph(object):
             return self
 
     def get_ordered_list_of_all_nodes(self):
+        """
+        Returns the list of all nodes (conditionals, vertices, data, ...), sorted by the index in their generated
+        name, which is to say: sorted by the order of their creation. Since each node can only depend on nodes
+        created before, we get a valid order for computations.
+
+        Used by the method `create_model`.
+
+        :return:     A list of nodes.
+        """
         def extract_number(s):
             result = 0
             for c in s:
@@ -312,6 +467,12 @@ class Graph(object):
         return result
 
     def create_model(self):
+        """
+        Creates a new model from the present graph. Note that the list of nodes is only a shallow copy. Hence, if you
+        were to change any data inside a node of this graph, it will also affect all models created.
+
+        :return:  A new instance of `Model` (`foppl_model`).
+        """
         from .foppl_model import Model
         compute_nodes = self.get_ordered_list_of_all_nodes()
         return Model(vertices=self.vertices, arcs=self.arcs, data=self.data,

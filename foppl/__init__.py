@@ -20,6 +20,9 @@ class Options(object):
 
     `conditional_suffix`:
         A string suffix that is appended to conditional variables.
+
+    `debug`:
+        Print out additional information, e. g., about the nodes in the graph.
     """
 
     eager_conditionals = True
@@ -27,3 +30,5 @@ class Options(object):
     uniform_conditionals = True
 
     conditional_suffix = '.data[0]'
+
+    debug = False

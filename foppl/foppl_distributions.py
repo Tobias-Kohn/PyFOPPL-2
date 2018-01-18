@@ -4,8 +4,27 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 07. Jan 2018, Tobias Kohn
+# 18. Jan 2018, Tobias Kohn
 #
+distributions = {
+    "Bernoulli": "discrete",
+    "Categorical": "discrete",
+    "Discrete": "discrete",
+    "Multinomial": "discrete",
+    "Poisson": "discrete",
+
+    "Beta": "continuous",
+    "Cauchy": "continuous",
+    "Dirichlet": "continuous",
+    "Exponential": "continuous",
+    "Gamma": "continuous",
+    "HalfCauchy": "continuous",
+    "LogNormal": "continuous",
+    "MultivariateNormal": "continuous",
+    "Normal": "continuous",
+    "Uniform": "continuous"
+}
+
 discrete_distributions = {
     "Bernoulli",
     "Categorical",
@@ -50,7 +69,7 @@ distribution_params = {
     "Categorical": ["ps"],
     "Cauchy": ["mu", "gamma"],
     "Dirichlet": ["alpha"],
-    "Exponential": ["lambda"],
+    "Exponential": ["lam"],
     "LogNormal": ["mu", "sigma"],
     "Gamma": ["alpha", "beta"],
     "HalfCauchy": ["mu", "gamma"],

@@ -28,6 +28,9 @@ class Model(object):
         )
         return graph + model
 
+    def index_of_node(self, node):
+        return self.compute_nodes.index(node)
+
     def get_vertices(self):
         return self.vertices
 
