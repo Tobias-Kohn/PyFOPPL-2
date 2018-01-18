@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 17. Jan 2018, Tobias Kohn
-# 17. Jan 2018, Tobias Kohn
+# 18. Jan 2018, Tobias Kohn
 #
 from .code_types import *
 
@@ -17,6 +17,21 @@ class DistributionTypes(object):
             return ListType(FloatType, arg.size)
         else:
             return FloatType()
+
+    @classmethod
+    def categorical(cls, args: list):
+        if len(args) == 1:
+            arg = args[0]
+            if isinstance(arg, SequenceType):
+                return arg.item_type
+        raise TypeError("wrong number or type of arguments for 'categorical': {}".format(len(args)))
+
+    @classmethod
+    def gamma(cls, args: list):
+        if len(args) == 2:
+            return cls.__cont_dist__(args, 0)
+        else:
+            raise TypeError("wrong number of arguments for 'gamma': {}".format(len(args)))
 
     @classmethod
     def normal(cls, args: list):

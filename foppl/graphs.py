@@ -75,8 +75,7 @@ class ConditionNode(GraphNode):
         else:
             result = "???"
         ancestors = ', '.join([v.name for v in self.ancestors])
-        return "{}:\n\tAncestors: {}\n\tCondition: {}\n\tCode: {}\n\tFunc-Code: {}".format(self.name, ancestors, result,
-                                                                          self.code, self.function_code)
+        return "{}:\n\tAncestors: {}\n\tCondition: {}".format(self.name, ancestors, result)
 
     @property
     def has_function(self):
@@ -183,7 +182,6 @@ class Vertex(GraphNode):
             result += "\tConditions: {}\n".format(', '.join(["{} == {}".format(c.name, v) for c, v in self.conditions]))
         if self.observation:
             result += "\tObservation: {}\n".format(repr(self.observation))
-        result += "\tCode: {}\n".format(self.code)
         return result
 
     def _add_dependent_condition(self, cond: ConditionNode):
@@ -267,20 +265,11 @@ class Graph(object):
         self.conditions = set(conditions)
 
     def __repr__(self):
-        V = "Vertices V:\n  " + '  '.join(sorted([repr(v) for v in self.vertices]))
-        if len(self.arcs) > 0:
-            A = "Arcs A:\n  " + ', '.join(['({}, {})'.format(u.name, v.name) for (u, v) in self.arcs]) + "\n"
-        else:
-            A = "Arcs A: -\n"
-        if len(self.conditions) > 0:
-            C = "Conditions C:\n  " +'\n  '.join(sorted([repr(v) for v in self.conditions])) + "\n"
-        else:
-            C = "Conditions C: -\n"
-        if len(self.data) > 0:
-            D = "Data D:\n  " + '\n  '.join([repr(u) for u in self.data])
-        else:
-            D = "Data D: -\n"
-        return "\n".join([V, A, C, D])
+        V = '  '.join(sorted([repr(v) for v in self.vertices]))
+        A = ', '.join(['({}, {})'.format(u.name, v.name) for (u, v) in self.arcs]) if len(self.arcs) > 0 else "-"
+        C = '\n  '.join(sorted([repr(v) for v in self.conditions])) if len(self.conditions) > 0 else "-"
+        D = '\n  '.join([repr(u) for u in self.data]) if len(self.data) > 0 else "-"
+        return "Vertices V:\n  {V}\nArcs A:\n  {A}\n\nConditions C:\n  {C}\n\nData D:\n  {D}\n".format(V=V, A=A, C=C, D=D)
 
     @property
     def is_empty(self):

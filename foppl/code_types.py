@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 17. Jan 2018, Tobias Kohn
+# 18. Jan 2018, Tobias Kohn
 #
 class AnyType(object):
 
@@ -279,7 +279,7 @@ def get_code_type_for_value(value):
         return NullType()
     elif t in __primitive_types:
         return __primitive_types[t]()
-    if type(t) is list:
+    elif t is list:
         return ListType.fromList([get_code_type_for_value(v) for v in value])
     return AnyType()
 
