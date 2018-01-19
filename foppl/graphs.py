@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 19. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -245,6 +245,8 @@ class Vertex(GraphNode):
       The set of all parent vertices. This contains only the ancestors, which are in direct line, and not the parents
       of parents. Use the `get_all_ancestors()`-method to retrieve a full list of all ancestors (including parents of
       parents of parents of ...).
+    `dist_ancestors`:
+      The set of ancestors used for the distribution/sampling, without those used inside the conditions.
     `data`:
       A set of all data nodes, which provide data used in this vertex.
     `distribution`:
@@ -288,7 +290,14 @@ class Vertex(GraphNode):
             conditions = []
         self.name = name
         self.original_name = None
-        self.ancestors = ancestors
+        self.dist_ancestors = ancestors
+        if len(conditions) > 0:
+            anc = list(ancestors)
+            for c,_ in conditions:
+                anc += list(c.ancestors)
+            self.ancestors = set(anc)
+        else:
+            self.ancestors = ancestors
         self.data = data
         self.distribution = distribution
         self.observation = observation
@@ -436,6 +445,18 @@ class Graph(object):
             return Graph(set.union(self.vertices, other.vertices), set.union(self.data, other.data))
         else:
             return self
+
+    def get_vertex_for_distribution(self, distribution):
+        """
+        Returns the vertex that has the specified distribution or `None`, if no such vertex exists.
+
+        :param distribution:  The distribution as a `CodeObject`.
+        :return:              Either a `Vertex` or `None`.
+        """
+        for v in self.vertices:
+            if v.distribution == distribution:
+                return v
+        return None
 
     def get_ordered_list_of_all_nodes(self):
         """

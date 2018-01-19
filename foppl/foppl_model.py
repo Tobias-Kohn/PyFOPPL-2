@@ -4,8 +4,21 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 19. Jan 2018, Tobias Kohn
 #
+
+# We try to import `networkx` and `matplotlib`. If present, these packages can be used to get a visual
+# representation of the graph. But neither of these packages is actually needed.
+try:
+    import networkx as nx
+except ModuleNotFoundError:
+    nx = None
+
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    plt = None
+
 class Model(object):
 
     def __init__(self, *, vertices: set, arcs: set, data: set, conditionals: set, compute_nodes: list):
@@ -27,6 +40,43 @@ class Model(object):
             ', '.join(sorted([v.name for v in self.gen_if_vars()])),
         )
         return graph + model
+
+    def create_network_graph(self):
+        if nx:
+            G = nx.DiGraph()
+            for v in self.vertices:
+                G.add_node(v.name)
+                for a in v.ancestors:
+                    G.add_edge(a.name, v.name)
+            return G
+        else:
+            return None
+
+    def display_network_graph(self):
+        G = self.create_network_graph()
+        if nx and plt and G:
+            try:
+                from networkx.drawing.nx_agraph import graphviz_layout
+                pos = graphviz_layout(G, prog='dot')
+            except ModuleNotFoundError:
+                from networkx.drawing.layout import shell_layout
+                pos = shell_layout(G)
+            plt.subplot(111)
+            plt.axis('off')
+            nx.draw_networkx_nodes(G, pos,
+                                   node_color='r', alpha=0.75,
+                                   node_size=1200,
+                                   nodelist=[v.name for v in self.vertices if v.is_sampled])
+            nx.draw_networkx_nodes(G, pos,
+                                   node_color='b', alpha=0.75,
+                                   node_size=1250,
+                                   nodelist=[v.name for v in self.vertices if v.is_observed])
+            nx.draw_networkx_edges(G, pos, arrows=True)
+            nx.draw_networkx_labels(G, pos)
+            plt.show()
+            return True
+        else:
+            return False
 
     def index_of_node(self, node):
         return self.compute_nodes.index(node)

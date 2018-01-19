@@ -4,10 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 17. Jan 2018, Tobias Kohn
+# 19. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .foppl_objects import Symbol
+from .foppl_distributions import continuous_distributions, discrete_distributions
 
 def _has_second_argument(f):
     try:

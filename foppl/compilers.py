@@ -145,7 +145,11 @@ class Compiler(Walker):
         if isinstance(value, AstFunction):
             self.scope.add_function(name, value)
         else:
-            self.scope.add_symbol(name, value.walk(self))
+            graph, expr = value.walk(self)
+            if isinstance(expr, CodeSample) or isinstance(expr, CodeObserve):
+                v = graph.get_vertex_for_distribution(expr.distribution)
+                if v: v.original_name = name
+            self.scope.add_symbol(name, (graph, expr))
 
     def resolve_function(self, name):
         return self.scope.find_function(name)
