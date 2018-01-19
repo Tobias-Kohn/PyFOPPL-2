@@ -6,6 +6,7 @@
 # 20. Dec 2017, Tobias Kohn
 # 19. Jan 2018, Tobias Kohn
 #
+from . import runtime
 
 # We try to import `networkx` and `matplotlib`. If present, these packages can be used to get a visual
 # representation of the graph. But neither of these packages is actually needed.

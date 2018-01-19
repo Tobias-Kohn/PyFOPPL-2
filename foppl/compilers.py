@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 19. Jan 2018, Tobias Kohn
 #
 import math
 from . import foppl_objects
@@ -159,6 +159,44 @@ class Compiler(Walker):
     def resolve_symbol(self, name):
         return self.scope.find_symbol(name)
 
+    def apply_function(self, function: AstFunction, args: list):
+        """
+        Applies a function to a series of arguments by simple substitution/replacement.
+
+        The effect of this method is the same as if the arguments were bound to the parameters by `let`
+        and the body of the function was then evaluated. This means, that the method opens a new scope,
+        binds all arguments to their respective parameters, and then evaluates the body through walking
+        it using the compiler as the walker.
+
+        The major limitation of this approach is that values might actually be evaluated more than once
+        and not in the order of the arguments. In other words: this works only if we assume that all
+        arguments/values are pure in the functional sense, i.e. without side effects.
+
+        :param function:  The function to be applied, as a `AstFunction`-object.
+        :param args:      All arguments as a list of AST-nodes.
+        :return:          A tuple (graph, expr).
+        """
+        assert isinstance(function, AstFunction)
+        if len(function.params) != len(args):
+            raise SyntaxError("wrong number of arguments for '{}'".format(function.name))
+
+        self.begin_scope()
+        try:
+            for (name, value) in zip(function.params, args):
+                if isinstance(name, Symbol):
+                    name = name.name
+                if isinstance(value, AstFunction):
+                    self.scope.add_function(name, value)
+                else:
+                    if type(value) in [int, bool, str, float]:
+                        self.scope.add_symbol(name, (Graph.EMPTY, AstValue(value)))
+                    else:
+                        self.scope.add_symbol(name, value.walk(self))
+            result = function.body.walk(self)
+        finally:
+            self.end_scope()
+        return result
+
     def visit_node(self, node: Node):
         raise NotImplementedError(node)
 
@@ -174,25 +212,25 @@ class Compiler(Walker):
             value = code_l.value
             if value == 0:
                 if node.op == '+':
-                    return code_r
+                    return graph, code_r
                 elif node.op == '-':
                     return AstUnary('-', node.right).walk(self)
                 elif node.op in ['*', '/']:
-                    return code_l
+                    return graph, code_l
             elif value == 1:
                 if node.op == '*':
-                    return code_r
+                    return graph, code_r
 
         elif isinstance(code_r, CodeValue):
             value = code_r.value
             if value == 0:
                 if node.op in ['+', '-']:
-                    return code_l
+                    return graph, code_l
                 elif node.op == '*':
-                    return code_r
+                    return graph, code_r
             elif value == 1:
                 if node.op in ['*', '/']:
-                    return code_l
+                    return graph, code_l
 
 
         code = CodeBinary(code_l, node.op, code_r)
@@ -205,6 +243,74 @@ class Compiler(Walker):
             g, code = item.walk(self)
             graph = graph.merge(g)
         return graph, code
+
+    def visit_call_exp(self, node: AstFunctionCall):
+        if len(node.args) == 1:
+            graph, arg = node.args[0].walk(self)
+            if isinstance(arg, CodeValue) and type(arg.value) in [int, float]:
+                return graph, CodeValue(math.exp(arg.value))
+            else:
+                return graph, CodeFunctionCall('math.exp', [arg])
+        else:
+            raise SyntaxError("'exp' requires exactly one argument")
+
+    def visit_call_get(self, node: AstFunctionCall):
+        args = node.args
+        if len(args) == 2:
+            seq_graph, seq_expr = args[0].walk(self)
+            idx_graph, idx_expr = args[1].walk(self)
+            graph = seq_graph.merge(idx_graph)
+            if isinstance(idx_expr, CodeValue) and type(idx_expr.value) is int:
+                index = idx_expr.value
+                if isinstance(seq_expr, CodeValue) and type(seq_expr.value) is list:
+                    return graph, CodeValue(seq_expr.value[index])
+
+                elif isinstance(seq_expr, CodeVector):
+                    return graph, seq_expr.items[index]
+
+                elif isinstance(seq_expr, CodeDataSymbol) and type(seq_expr.node.data) is list:
+                    return graph, CodeValue(seq_expr.node.data[index])
+
+                elif isinstance(seq_expr, CodeSlice) and seq_expr.endIndex is None:
+                    index += seq_expr.beginIndex
+                    seq = seq_expr.seq
+                    if isinstance(seq, CodeValue) and type(seq.value) is list:
+                        return graph, CodeValue(seq.value[index])
+
+                    elif isinstance(seq, CodeVector):
+                        return graph, seq.items[index]
+
+                    elif isinstance(seq, CodeDataSymbol) and type(seq.node.data) is list:
+                        return graph, CodeValue(seq.node.data[index])
+
+                    return graph, CodeSubscript(seq_expr.seq, index)
+
+                else:
+                    return graph, CodeSubscript(seq_expr, idx_expr)
+
+            else:
+                return graph, CodeSubscript(seq_expr, CodeFunctionCall('int', idx_expr))
+
+        else:
+            raise SyntaxError("'get' expects exactly two arguments")
+
+    def visit_call_rest(self, node: AstFunctionCall):
+        args = node.args
+        if len(args) == 1:
+            graph, expr = args[0].walk(self)
+            if isinstance(expr, CodeValue) and type(expr.value) is list:
+                return graph, CodeValue(expr.value[1:])
+
+            elif isinstance(expr, CodeVector):
+                return graph, CodeVector(expr.items[1:])
+
+            elif isinstance(expr, CodeSlice) and expr.endIndex is None:
+                return graph, CodeSlice(expr.seq, expr.beginIndex+1, None)
+
+            else:
+                return graph, CodeSlice(expr, 1, None)
+        else:
+            raise SyntaxError("'rest' expects exactly one argument")
 
     def visit_compare(self, node: AstCompare):
         graph_l, code_l = node.left.walk(self)
@@ -224,6 +330,39 @@ class Compiler(Walker):
         args = self.walk_all(node.args)
         graph = merge(*[g for g, _ in args])
         return graph, CodeDistribution(node.name, [a for _, a in args])
+
+    def visit_expr(self, node: AstExpr):
+        return node.value
+
+    def visit_functioncall(self, node: AstFunctionCall):
+        # NB: some functions are handled directly by visit_call_XXX-methods!
+        func = node.function
+        if isinstance(func, AstSymbol):
+            func = func.name
+        if type(func) is str:
+            func_name = func
+            func = self.scope.find_function(func)
+        else:
+            func_name = None
+
+        if isinstance(func, AstFunction) and False:
+            return self.apply_function(func, node.args)
+
+        elif func_name:
+            args = []
+            graph = Graph.EMPTY
+            for a in node.args:
+                g, e = a.walk(self)
+                graph = graph.merge(g)
+                args.append(e)
+
+            if func_name in runtime.__all__:
+                func_name = 'runtime.' + func_name
+
+            return graph, CodeFunctionCall(func_name, args)
+
+        else:
+            raise SyntaxError("'{}' is not a function".format(node.function))
 
     def visit_if(self, node: AstIf):
         cond_graph, cond = node.cond.walk(self)
@@ -249,6 +388,26 @@ class Compiler(Walker):
             result = node.body.walk(self)
         finally:
             self.end_scope()
+        return result
+
+    def visit_loop(self, node: AstLoop):
+        if isinstance(node.function, AstSymbol):
+            function = self.scope.find_function(node.function.name)
+        elif isinstance(node.function, AstFunction):
+            function = node.function
+        else:
+            raise SyntaxError("'loop' requires a function")
+
+        iter_count = node.iter_count
+        if iter_count == 0:
+            return Graph.EMPTY, CodeValue(None)
+
+        i = 0
+        args = [AstExpr(*a.walk(self)) for a in node.args]
+        result = node.arg.walk(self)
+        while i < iter_count:
+            result = self.apply_function(function, [AstValue(i), AstExpr(*result)] + args)
+            i += 1
         return result
 
     def visit_observe(self, node: AstObserve):

@@ -65,7 +65,7 @@ log_pdf += dist.Normal((state['x1'] + state['x2'])/2, 1).log_pdf(3)
 ```
 Both computations are facilitated by the methods `update` and `update_pdf` of the node.
 """
-from . import Options
+from . import Options, runtime
 from .foppl_distributions import distributions
 
 

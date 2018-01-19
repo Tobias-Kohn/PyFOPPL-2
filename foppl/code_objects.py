@@ -146,6 +146,60 @@ class CodeSample(CodeObject):
         return "state['{}']".format(self.vertex.name)
 
 
+class CodeSlice(CodeObject):
+
+    def __init__(self, seq: CodeObject, beginIndex, endIndex):
+        self.seq = seq
+        self.beginIndex = beginIndex
+        self.endIndex = endIndex
+        if isinstance(seq.code_type, SequenceType):
+            self.code_type = seq.code_type
+        else:
+            raise TypeError("'{}' is not a sequence".format(repr(seq)))
+
+    def __repr(self, seq_repr):
+        if self.beginIndex is None:
+            beginIndex = ''
+        elif type(self.beginIndex) in [int, float]:
+            beginIndex = repr(int(self.beginIndex))
+        elif isinstance(self.beginIndex, CodeObject):
+            beginIndex = repr(self.beginIndex)
+        else:
+            raise TypeError("invalid index: '{}'".format(self.beginIndex))
+
+        if self.endIndex is None:
+            endIndex = ''
+        elif type(self.endIndex) in [int, float]:
+            endIndex = repr(int(self.endIndex))
+        elif isinstance(self.endIndex, CodeObject):
+            endIndex = repr(self.endIndex)
+        else:
+            raise TypeError("invalid index: '{}'".format(self.endIndex))
+
+        return "{}[{}:{}]".format(repr(self.seq), beginIndex, endIndex)
+
+    def to_py(self):
+        if self.beginIndex is None:
+            beginIndex = ''
+        elif type(self.beginIndex) in [int, float]:
+            beginIndex = repr(int(self.beginIndex))
+        elif isinstance(self.beginIndex, CodeObject):
+            beginIndex = self.beginIndex.to_py()
+        else:
+            raise TypeError("invalid index: '{}'".format(self.beginIndex))
+
+        if self.endIndex is None:
+            endIndex = ''
+        elif type(self.endIndex) in [int, float]:
+            endIndex = repr(int(self.endIndex))
+        elif isinstance(self.endIndex, CodeObject):
+            endIndex = self.endIndex.to_py()
+        else:
+            raise TypeError("invalid index: '{}'".format(self.endIndex))
+
+        return "{}[{}:{}]".format(self.seq.to_py(), beginIndex, endIndex)
+
+
 class CodeSqrt(CodeObject):
 
     def __init__(self, item: CodeObject):

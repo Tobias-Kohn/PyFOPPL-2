@@ -79,8 +79,12 @@ class Walker(ast.NodeVisitor):
             name = node.func.id
             args = [self.visit(arg) for arg in node.args]
             if name == 'sample':
+                if len(args) != 1:
+                    raise SyntaxError("wrong number of arguments for 'sample': {}".format(len(args)))
                 return foppl_ast.AstSample(args[0])
             elif name == 'observe':
+                if len(args) != 2:
+                    raise SyntaxError("wrong number of arguments for 'observe': {}".format(len(args)))
                 return foppl_ast.AstObserve(args[0], args[1])
             elif name in distribution_map:
                 return foppl_ast.AstDistribution(distribution_map[name], args)
@@ -138,6 +142,11 @@ class Walker(ast.NodeVisitor):
 
     def visit_IfExp(self, node: ast.IfExp):
         print(ast.dump(node))
+        raise NotImplemented
+
+    def visit_List(self, node: ast.List):
+        print(ast.dump(node))
+        raise NotImplemented
 
     def visit_Module(self, node: ast.Module):
         return self.__visit_body(node.body, needs_return=False)
