@@ -69,7 +69,7 @@ from . import Options
 from .foppl_distributions import distributions
 
 
-####################################################################################################3
+####################################################################################################
 
 class GraphNode(object):
     """
@@ -101,6 +101,10 @@ class GraphNode(object):
         cls.__base__.__symbol_counter__ += 1
         return "{}{}".format(prefix, cls.__base__.__symbol_counter__)
 
+    @property
+    def display_name(self):
+        return self.name[-3:]
+
     def evaluate(self, state):
         raise NotImplemented()
 
@@ -114,7 +118,7 @@ class GraphNode(object):
         return 0.0
 
 
-####################################################################################################3
+####################################################################################################
 
 # This is used to generate the various `evaluate`-methods later on.
 _LAMBDA_PATTERN_ = "lambda state: {}"
@@ -247,6 +251,8 @@ class Vertex(GraphNode):
       parents of parents of ...).
     `dist_ancestors`:
       The set of ancestors used for the distribution/sampling, without those used inside the conditions.
+    `cond_ancestors`:
+      The set of ancestors, which are linked through conditionals.
     `data`:
       A set of all data nodes, which provide data used in this vertex.
     `distribution`:
@@ -292,12 +298,13 @@ class Vertex(GraphNode):
         self.original_name = None
         self.dist_ancestors = ancestors
         if len(conditions) > 0:
-            anc = list(ancestors)
+            anc = []
             for c,_ in conditions:
                 anc += list(c.ancestors)
-            self.ancestors = set(anc)
+            self.cond_ancestors = set(anc)
         else:
-            self.ancestors = ancestors
+            self.cond_ancestors = set()
+        self.ancestors = ancestors.union(self.cond_ancestors)
         self.data = data
         self.distribution = distribution
         self.observation = observation
@@ -395,7 +402,7 @@ class Vertex(GraphNode):
         return log_pdf
 
 
-####################################################################################################3
+####################################################################################################
 
 class Graph(object):
     """
@@ -487,7 +494,7 @@ class Graph(object):
             result.append(nodes[key])
         return result
 
-    def create_model(self):
+    def create_model(self, *, result_expr=None):
         """
         Creates a new model from the present graph. Note that the list of nodes is only a shallow copy. Hence, if you
         were to change any data inside a node of this graph, it will also affect all models created.
@@ -496,8 +503,13 @@ class Graph(object):
         """
         from .foppl_model import Model
         compute_nodes = self.get_ordered_list_of_all_nodes()
+        if result_expr:
+            result_function = eval(_LAMBDA_PATTERN_.format(result_expr))
+        else:
+            result_function = None
         return Model(vertices=self.vertices, arcs=self.arcs, data=self.data,
-                     conditionals=self.conditions, compute_nodes=compute_nodes)
+                     conditionals=self.conditions, compute_nodes=compute_nodes,
+                     result_function=result_function)
 
 
 Graph.EMPTY = Graph(vertices=set())

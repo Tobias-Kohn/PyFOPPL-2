@@ -8,6 +8,8 @@
 #
 import math
 from . import foppl_objects
+from . import foppl_parser
+from . import py_parser
 from .foppl_ast import *
 from .code_objects import *
 from .graphs import *
@@ -146,7 +148,7 @@ class Compiler(Walker):
             self.scope.add_function(name, value)
         else:
             graph, expr = value.walk(self)
-            if isinstance(expr, CodeSample) or isinstance(expr, CodeObserve):
+            if isinstance(expr, CodeSample):
                 v = graph.get_vertex_for_distribution(expr.distribution)
                 if v: v.original_name = name
             self.scope.add_symbol(name, (graph, expr))
@@ -306,11 +308,36 @@ class Compiler(Walker):
         return graph, code
 
 
+def _detect_language(source:str):
+    i = 0
+    while i < len(source) and source[i] <= ' ': i += 1
+    if i < len(source):
+        c = source[i]
+        if c in [';', '(']:
+            return 'clj'
+        elif c in ['#'] or 'A' <= c <= 'Z' or 'a' <= c <= 'z':
+            return 'py'
+    return None
+
+
 def compile(source):
-    from .foppl_parser import parse
-    if isinstance(source, Node):
+    if type(source) is str:
+        lang = _detect_language(source)
+        if lang == 'py':
+            ast = py_parser.parse(source)
+        elif lang == 'clj':
+            ast = foppl_parser.parse(source)
+        else:
+            ast = None
+
+    elif isinstance(source, Node):
         ast = source
+
     else:
-        ast = parse(source)
-    compiler = Compiler()
-    return compiler.walk(ast)
+        ast = None
+
+    if ast:
+        compiler = Compiler()
+        return compiler.walk(ast)
+    else:
+        raise RuntimeError("cannot parse '{}'".format(source))

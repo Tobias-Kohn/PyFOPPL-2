@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 18. Nov 2017, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 19. Jan 2018, Tobias Kohn
 #
 from importlib.abc import Loader as _Loader, MetaPathFinder as _MetaPathFinder
 from .compilers import compile
@@ -14,7 +14,7 @@ _PATH = sys.path[0]
 
 def compile_module(module, input_text):
     graph, expr = compile(input_text)
-    module.model = graph.create_model()
+    module.model = graph.create_model(result_expr=expr)
     return module
 
 class Clojure_Loader(_Loader):
@@ -44,16 +44,15 @@ class Clojure_Finder(_MetaPathFinder):
             raise NotImplementedError()
 
         possible_locations = [
-            fullname + ".foppl",
-            "foppl_src/" + fullname + ".foppl",
-            "examples/" + fullname + ".foppl",
-            fullname + ".clj",
-            "foppl_src/" + fullname + ".clj",
-            "examples/" + fullname + ".clj",
+            '',
+            'foppl_src/',
+            'examples/'
         ]
-        for loc in possible_locations:
-            if os.path.exists(loc):
-                return ModuleSpec(os.path.realpath(loc), Clojure_Loader())
+        for ext in ['.foppl', '.foppl.clj', '.foppl.py', '.clj']:
+            for loc in possible_locations:
+                name = loc + fullname + ext
+                if os.path.exists(name):
+                    return ModuleSpec(os.path.realpath(name), Clojure_Loader())
         return None
 
 import sys
