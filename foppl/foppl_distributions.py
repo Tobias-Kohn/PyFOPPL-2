@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 distributions = {
     "Bernoulli": "discrete",
@@ -79,3 +79,6 @@ distribution_params = {
     "Poisson": ["lam"],
     "Uniform": ["a", "b"]
 }
+
+def get_arg_count(distr: str):
+    return len(distribution_params.get(distr, []))

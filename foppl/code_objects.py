@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 17. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .code_types import *
@@ -85,8 +85,11 @@ class CodeFunction(CodeObject):
 class CodeFunctionCall(CodeObject):
 
     def __init__(self, name, args):
+        if type(args) is not list:
+            args = [args]
         self.name = name
         self.args = args
+        self.code_type = AnyType()
 
     def __repr__(self):
         return "{}({})".format(self.name, ', '.join([repr(a) for a in self.args]))
@@ -291,5 +294,41 @@ class CodeVector(CodeObject):
     def __repr__(self):
         return "[{}]".format(', '.join([repr(i) for i in self.items]))
 
+    @property
+    def is_empty(self):
+        return len(self.items) == 0
+
+    @property
+    def non_empty(self):
+        return len(self.items) > 0
+
+    @property
+    def head(self):
+        return self.items[0] if len(self.items) > 0 else None
+
     def to_py(self):
         return "[{}]".format(', '.join([i.to_py() for i in self.items]))
+
+
+#################################################################################################33
+
+def makeSubscript(seq, index):
+    if not isinstance(index.code_type, IntegerType):
+        if isinstance(index, CodeValue):
+            index = CodeValue(int(index.value))
+        else:
+            index = CodeFunctionCall('int', [index])
+    elif isinstance(index, CodeValue):
+        if isinstance(seq, CodeValue) and type(seq.value) is list:
+            return seq.value[index.value]
+        elif isinstance(seq, CodeVector):
+            return seq.items[index.value]
+    if isinstance(seq, CodeValue) and len(set(seq.value)) == 1:
+        return CodeValue(seq.value[0])
+    return CodeSubscript(seq, index)
+
+def makeVector(items: list):
+    if all([isinstance(item, CodeValue) for item in items]):
+        return CodeValue([item.value for item in items])
+    else:
+        return CodeVector(items)

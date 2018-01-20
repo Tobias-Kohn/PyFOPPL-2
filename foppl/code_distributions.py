@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 17. Jan 2018, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 from .code_types import *
 
@@ -42,7 +42,7 @@ class DistributionTypes(object):
         if len(args) == 1:
             arg = args[0]
             if isinstance(arg, SequenceType):
-                return arg.item_type
+                return IntegerType()
         cls.__arg_count_error('categorical', args)
 
     @classmethod

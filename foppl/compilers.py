@@ -4,11 +4,12 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 19. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 import math
 from . import foppl_objects
 from . import foppl_parser
+from . import foppl_distributions
 from . import py_parser
 from .foppl_ast import *
 from .code_objects import *
@@ -206,7 +207,7 @@ class Compiler(Walker):
         graph = merge(graph_l, graph_r)
 
         if isinstance(code_l, CodeValue) and isinstance(code_r, CodeValue) and node.op in self.__binary_ops:
-            return CodeValue(self.__binary_ops[node.op](code_l.value, code_r.value))
+            return graph, CodeValue(self.__binary_ops[node.op](code_l.value, code_r.value))
 
         elif isinstance(code_l, CodeValue):
             value = code_l.value
@@ -288,8 +289,16 @@ class Compiler(Walker):
                 else:
                     return graph, CodeSubscript(seq_expr, idx_expr)
 
+            elif isinstance(seq_expr, CodeVector) and isinstance(seq_expr.head, CodeDistribution):
+                # We made sure in `visit_vector` that a vector with a distribution contains the same
+                # type of distribution and nothing else, i.\,e. all distributions are of type `normal`.
+                distr_name = seq_expr.head.name
+                arg_count = foppl_distributions.get_arg_count(distr_name)
+                args = [makeVector([item.args[k] for item in seq_expr.items]) for k in range(arg_count)]
+                args = [makeSubscript(arg, idx_expr) for arg in args]
+                return graph, CodeDistribution(distr_name, args)
             else:
-                return graph, CodeSubscript(seq_expr, CodeFunctionCall('int', idx_expr))
+                return graph, makeSubscript(seq_expr, idx_expr)
 
         else:
             raise SyntaxError("'get' expects exactly two arguments")
@@ -345,7 +354,7 @@ class Compiler(Walker):
         else:
             func_name = None
 
-        if isinstance(func, AstFunction) and False:
+        if isinstance(func, AstFunction):
             return self.apply_function(func, node.args)
 
         elif func_name:
@@ -462,8 +471,17 @@ class Compiler(Walker):
 
     def visit_vector(self, node: AstVector):
         items = self.walk_all(node.items)
+        if len(items) == 0:
+            return Graph.EMPTY, CodeValue([])
         graph = merge(*[g for g, _ in items])
-        code = CodeVector([i for _, i in items])
+        items = [i for _, i in items]
+        code = CodeVector(items)
+        if all([isinstance(item, CodeDistribution) for item in items]):
+            names = set([item.name for item in items])
+            if len(names) > 1:
+                raise TypeError("vector/list cannot contain distributions of different types: '{}'".format(names))
+        elif any([isinstance(item, CodeDistribution) for item in items]):
+            raise TypeError("vector/list cannot contain distributions of different types: '{}'".format(names))
         return graph, code
 
 

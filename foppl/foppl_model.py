@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 19. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 from . import runtime
 
@@ -82,6 +82,9 @@ class Model(object):
                 from networkx.drawing.nx_agraph import graphviz_layout
                 pos = graphviz_layout(G, prog='dot')
             except ModuleNotFoundError:
+                from networkx.drawing.layout import shell_layout
+                pos = shell_layout(G)
+            except ImportError:
                 from networkx.drawing.layout import shell_layout
                 pos = shell_layout(G)
             plt.subplot(111)

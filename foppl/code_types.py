@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 class AnyType(object):
 
@@ -38,6 +38,8 @@ class AnyType(object):
     def union(self, other):
         cls1 = self.__class__
         cls2 = other.__class__
+        if issubclass(cls1, cls2): return self
+        if issubclass(cls2, cls1): return other
         while cls1 is not AnyType and cls2 is not AnyType:
             if issubclass(cls1, cls2):
                 return cls2()
