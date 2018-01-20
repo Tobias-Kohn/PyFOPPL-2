@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 19. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .foppl_objects import Symbol
@@ -129,13 +129,14 @@ class AstDef(Node):
 
 class AstDistribution(Node):
 
-    def __init__(self, name: str, args):
+    def __init__(self, name: str, args, line_number:int=-1):
         self.name = name
         self.args = args
         self.is_continuous = name.lower() in continuous_distributions
         self.is_discrete = name.lower() in discrete_distributions
         if self.is_continuous or self.is_discrete and name[0].islower():
             self.name = name[0].upper() + name[1:]
+        self.line_number = line_number
 
     def get_children(self):
         return self.args
@@ -216,10 +217,11 @@ class AstFunctionCall(Node):
 
 class AstIf(Node):
 
-    def __init__(self, cond: AstCompare, if_body, else_body):
+    def __init__(self, cond: AstCompare, if_body, else_body, line_number:int=-1):
         self.cond = cond
         self.if_body = if_body
         self.else_body = else_body
+        self.line_number = line_number
 
     def get_children(self):
         if self.else_body:
@@ -261,9 +263,10 @@ class AstLoop(Node):
 
 class AstObserve(Node):
 
-    def __init__(self, distribution: AstDistribution, value):
+    def __init__(self, distribution: AstDistribution, value, line_number:int=-1):
         self.distribution = distribution
         self.value = value
+        self.line_number = line_number
 
     def __repr__(self):
         return "observe({}, {})".format(repr(self.distribution), repr(self.value))
@@ -271,8 +274,9 @@ class AstObserve(Node):
 
 class AstSample(Node):
 
-    def __init__(self, distribution: AstDistribution):
+    def __init__(self, distribution: AstDistribution, line_number:int=-1):
         self.distribution = distribution
+        self.line_number = line_number
 
     def __repr__(self):
         return "sample({})".format(repr(self.distribution))

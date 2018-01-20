@@ -293,6 +293,7 @@ class Reader(object):
             return src.read_number()
 
         elif c in ['(', '[', '{']:
+            line_number = src.current_line()
             first_char = src.next()
             result = []
             while src.skip_space() not in [None, ')', ']', '}']:
@@ -302,12 +303,14 @@ class Reader(object):
                 src.next()
 
             if first_char == '(':
-                return Form(result)
+                result = Form(result)
             elif first_char == '[':
-                return Vector(result)
+                result = Vector(result)
             elif first_char == '{':
                 raise NotImplementedError()
-                # return Map(result)
+
+            result.line_number = line_number
+            return result
 
         elif c == '\'':
             return Form([Symbol.QUOTE, self.__next__()])

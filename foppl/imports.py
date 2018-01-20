@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 18. Nov 2017, Tobias Kohn
-# 19. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 from importlib.abc import Loader as _Loader, MetaPathFinder as _MetaPathFinder
 from .compilers import compile
@@ -24,7 +24,7 @@ class Clojure_Loader(_Loader):
 
     def exec_module(self, module):
         with open(module.__name__) as input_file:
-            input_text = '\n'.join(input_file.readlines())
+            input_text = ''.join(input_file.readlines())
             compile_module(module, input_text)
 
 class Clojure_Finder(_MetaPathFinder):

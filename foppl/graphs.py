@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 19. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -93,6 +93,7 @@ class GraphNode(object):
 
     name = ""
     ancestors = set()
+    line_number = -1
 
     __symbol_counter__ = 30000
 
@@ -135,7 +136,8 @@ class ConditionNode(GraphNode):
     can also gain information about the 'distance' to the 'border'.
     """
 
-    def __init__(self, *, name:str=None, condition=None, ancestors:set=None, op:str='?', function=None):
+    def __init__(self, *, name:str=None, condition=None, ancestors:set=None, op:str='?', function=None,
+                 line_number:int=-1):
         from .code_objects import CodeCompare, CodeValue
         if name is None:
             name = self.__class__.__gen_symbol__('cond_')
@@ -155,6 +157,7 @@ class ConditionNode(GraphNode):
         self.function_code = _LAMBDA_PATTERN_.format(function.to_py() if function else "None")
         self.evaluate = eval(self.code)
         self.evaluate_function = eval(self.function_code)
+        self.line_number = line_number
         for a in ancestors:
             if isinstance(a, Vertex):
                 a._add_dependent_condition(self)
@@ -173,6 +176,8 @@ class ConditionNode(GraphNode):
             result += "\n\tCode:          {}".format(self.code)
             if self.function:
                 result += "\n\tFunction-Code: {}".format(self.function_code)
+            if self.line_number >= 0:
+                result += "\n\tLine: {}".format(self.line_number)
         return result
 
     @property
@@ -196,7 +201,7 @@ class DataNode(GraphNode):
     depends on anything else, but only provides a constant value.
     """
 
-    def __init__(self, *, name:str=None, data):
+    def __init__(self, *, name:str=None, data, line_number:int=-1):
         if name is None:
             name = self.__class__.__gen_symbol__('data_')
         self.name = name
@@ -204,6 +209,7 @@ class DataNode(GraphNode):
         self.ancestors = set()
         self.code = _LAMBDA_PATTERN_.format(repr(self.data))
         self.evaluate = eval(self.code)
+        self.line_number = line_number
 
     def __repr__(self):
         return "{} = {}".format(self.name, repr(self.data))
@@ -218,7 +224,7 @@ class Parameter(GraphNode):
     upon intervention from the outside.
     """
 
-    def __init__(self, *, name:str=None, value):
+    def __init__(self, *, name:str=None, value, line_number:int=-1):
         if name is None:
             name = self.__class__.__gen_symbol__('param_')
         self.name = name
@@ -226,6 +232,7 @@ class Parameter(GraphNode):
         self.value = value
         self.code = _LAMBDA_PATTERN_.format(value)
         self.evaluate = eval(self.code)
+        self.line_number = line_number
 
     def __repr__(self):
         return "{}: {}".format(self.name, self.value)
@@ -279,7 +286,7 @@ class Vertex(GraphNode):
     """
 
     def __init__(self, *, name:str=None, ancestors:set=None, data:set=None, distribution=None, observation=None,
-                 ancestor_graph=None, conditions:list=None):
+                 ancestor_graph=None, conditions:list=None, line_number:int=-1):
         from . import code_types
         if name is None:
             name = self.__class__.__gen_symbol__('y' if observation else 'x')
@@ -323,6 +330,7 @@ class Vertex(GraphNode):
         else:
             self.evaluate_observation = None
             self.evaluate_observation_pdf = None
+        self.line_number = line_number
 
     def __repr__(self):
         result = "{}:\n" \
@@ -342,6 +350,8 @@ class Vertex(GraphNode):
                 self.code,
                 self.sample_size
             )
+            if self.line_number >= 0:
+                result += "\tLine: {}\n".format(self.line_number)
         return result
 
     def _add_dependent_condition(self, cond: ConditionNode):

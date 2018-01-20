@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 17. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 from .foppl_ast import *
 from .foppl_reader import *
@@ -83,12 +83,12 @@ class ExprParser(object):
             if f.name == "sample":
                 if len(args) != 1:
                     raise SyntaxError("'sample' requires exactly one argument")
-                return AstSample(args[0])
+                return AstSample(args[0], line_number=form.line_number)
 
             elif f.name == "observe":
                 if len(args) != 2:
                     raise SyntaxError("'observe' requires exactly two arguments")
-                return AstObserve(args[0], args[1])
+                return AstObserve(args[0], args[1], line_number=form.line_number)
 
             elif f.name == "vector":
                 return self._parse(Vector(form.data[1:]))
@@ -113,13 +113,13 @@ class ExprParser(object):
 
             # We need special treatment for the normal-distribution as in FOPPL, we provide sigma-squared as second
             # parameter instead of sigma itself.
-            elif f.name == "normal":
-                if len(args) >= 2:
-                    args[1] = AstSqrt(args[1])
-                return AstDistribution(distribution_map[f.name], args)
+            #elif f.name == "normal":
+            #    if len(args) >= 2:
+            #        args[1] = AstSqrt(args[1])
+            #    return AstDistribution(distribution_map[f.name], args)
 
             elif f.name in distribution_map:
-                return AstDistribution(distribution_map[f.name], args)
+                return AstDistribution(distribution_map[f.name], args, line_number=form.line_number)
 
             else:
                 return AstFunctionCall(f.name, args)
@@ -205,7 +205,7 @@ class Parser(object):
                 else_body = self._parse(form[3])
             else:
                 else_body = None
-            return AstIf(cond, if_body, else_body)
+            return AstIf(cond, if_body, else_body, line_number=form.line_number)
 
     @_register(Symbol.IF_NOT)
     class IfNotExpr(ExprParser):

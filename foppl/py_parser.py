@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Jan 2018, Tobias Kohn
-# 19. Jan 2018, Tobias Kohn
+# 20. Jan 2018, Tobias Kohn
 #
 import ast
 from . import Options, foppl_ast
@@ -75,19 +75,20 @@ class Walker(ast.NodeVisitor):
         return foppl_ast.AstBinary(_bin_op[node.op.__class__], self.visit(node.left), self.visit(node.right))
 
     def visit_Call(self, node: ast.Call):
+        line_number = getattr(node, 'lineno', -1)
         if isinstance(node.func, ast.Name):
             name = node.func.id
             args = [self.visit(arg) for arg in node.args]
             if name == 'sample':
                 if len(args) != 1:
                     raise SyntaxError("wrong number of arguments for 'sample': {}".format(len(args)))
-                return foppl_ast.AstSample(args[0])
+                return foppl_ast.AstSample(args[0], line_number=line_number)
             elif name == 'observe':
                 if len(args) != 2:
                     raise SyntaxError("wrong number of arguments for 'observe': {}".format(len(args)))
-                return foppl_ast.AstObserve(args[0], args[1])
+                return foppl_ast.AstObserve(args[0], args[1], line_number=line_number)
             elif name in distribution_map:
-                return foppl_ast.AstDistribution(distribution_map[name], args)
+                return foppl_ast.AstDistribution(distribution_map[name], args, line_number=line_number)
             else:
                 return foppl_ast.AstFunctionCall(name, args)
 
@@ -122,6 +123,7 @@ class Walker(ast.NodeVisitor):
             raise SyntaxError("invalid comparison: '{}'".format(ast.dump(node)))
 
     def visit_Expr(self, node: ast.Expr):
+        self.current_line = node.lineno
         return self.visit(node.value)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):

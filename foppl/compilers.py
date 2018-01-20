@@ -67,7 +67,7 @@ class ConditionalScope(object):
     Conditional scope
     """
 
-    def __init__(self, prev=None, condition=None, ancestors=None):
+    def __init__(self, prev=None, condition=None, ancestors=None, line_number=-1):
         self.prev = prev
         self.condition = condition
         self.ancestors = ancestors
@@ -79,9 +79,10 @@ class ConditionalScope(object):
             self.truth_value = not self.truth_value
         if isinstance(cond, CodeCompare) and cond.is_normalized:
             func = cond.left
-            self.cond_node = ConditionNode(condition=self.condition, function=func, ancestors=self.ancestors)
+            self.cond_node = ConditionNode(condition=self.condition, function=func, ancestors=self.ancestors,
+                                           line_number=line_number)
         else:
-            self.cond_node = ConditionNode(condition=self.condition, ancestors=self.ancestors)
+            self.cond_node = ConditionNode(condition=self.condition, ancestors=self.ancestors, line_number=line_number)
 
     def invert(self):
         self.truth_value = not self.truth_value
@@ -109,6 +110,7 @@ class Compiler(Walker):
     def __init__(self):
         self.scope = Scope()
         self.cond_scope = None
+        self.graph = Graph.EMPTY
 
     def begin_scope(self):
         self.scope = Scope(prev=self.scope)
@@ -119,8 +121,8 @@ class Compiler(Walker):
         else:
             raise RuntimeError('[stack underflow] ending global scope')
 
-    def begin_conditional_scope(self, condition, ancestors):
-        self.cond_scope = ConditionalScope(self.cond_scope, condition, ancestors)
+    def begin_conditional_scope(self, condition, ancestors, line_number=-1):
+        self.cond_scope = ConditionalScope(self.cond_scope, condition, ancestors, line_number)
 
     def end_conditional_scope(self):
         if self.cond_scope:
@@ -159,6 +161,9 @@ class Compiler(Walker):
 
     def resolve_symbol(self, name):
         return self.scope.find_symbol(name)
+
+    def _merge_graph(self, graph):
+        self.graph = self.graph.merge(graph)
 
     def apply_function(self, function: AstFunction, args: list):
         """
@@ -242,7 +247,8 @@ class Compiler(Walker):
         code = CodeValue(None)
         for item in node.body:
             g, code = item.walk(self)
-            graph = graph.merge(g)
+            self._merge_graph(g)
+            graph = g # graph.merge(g)
         return graph, code
 
     def visit_call_exp(self, node: AstFunctionCall):
@@ -375,7 +381,7 @@ class Compiler(Walker):
 
     def visit_if(self, node: AstIf):
         cond_graph, cond = node.cond.walk(self)
-        self.begin_conditional_scope(cond, cond_graph.vertices)
+        self.begin_conditional_scope(cond, cond_graph.vertices, node.line_number)
         try:
             graph, if_code = node.if_body.walk(self)
             if node.else_body:
@@ -423,13 +429,18 @@ class Compiler(Walker):
         graph, dist = node.distribution.walk(self)
         obs_graph, obs_value = node.value.walk(self)
         vertex = Vertex(ancestor_graph=merge(graph, obs_graph), distribution=dist, observation=obs_value,
-                        conditions=self.current_conditions())
-        return Graph({vertex}).merge(graph), CodeObserve(vertex)
+                        conditions=self.current_conditions(), line_number=node.line_number)
+        graph = Graph({vertex}).merge(graph)
+        self._merge_graph(graph)
+        return Graph.EMPTY, CodeObserve(vertex)
 
     def visit_sample(self, node: AstSample):
         graph, dist = node.distribution.walk(self)
-        vertex = Vertex(ancestor_graph=graph, distribution=dist, conditions=self.current_conditions())
-        return Graph({vertex}).merge(graph), CodeSample(vertex)
+        vertex = Vertex(ancestor_graph=graph, distribution=dist, conditions=self.current_conditions(),
+                        line_number=node.line_number)
+        graph = Graph({vertex}).merge(graph)
+        self._merge_graph(graph)
+        return graph, CodeSample(vertex)
 
     def visit_sqrt(self, node: AstSqrt):
         graph, code = node.item.walk(self)
@@ -481,7 +492,7 @@ class Compiler(Walker):
             if len(names) > 1:
                 raise TypeError("vector/list cannot contain distributions of different types: '{}'".format(names))
         elif any([isinstance(item, CodeDistribution) for item in items]):
-            raise TypeError("vector/list cannot contain distributions of different types: '{}'".format(names))
+            raise TypeError("vector/list cannot contain distributions of different types: '{}'".format(items))
         return graph, code
 
 
@@ -515,6 +526,7 @@ def compile(source):
 
     if ast:
         compiler = Compiler()
-        return compiler.walk(ast)
+        graph, code = compiler.walk(ast)
+        return graph.merge(compiler.graph), code
     else:
         raise RuntimeError("cannot parse '{}'".format(source))
