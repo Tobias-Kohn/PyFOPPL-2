@@ -189,20 +189,24 @@ class Compiler(Walker):
         if len(function.params) != len(args):
             raise SyntaxError("wrong number of arguments for '{}'".format(function.name))
 
+        bindings = []
+        for (name, value) in zip(function.params, args):
+            if isinstance(name, Symbol):
+                name = name.name
+            if isinstance(value, AstFunction):
+                bindings.append((name, value))
+            else:
+                if type(value) in [int, bool, str, float]:
+                    bindings.append((name, (Graph.EMPTY, AstValue(value))))
+                elif type(value) is tuple and len(value) == 2:
+                    bindings.append((name, value))
+                else:
+                    bindings.append((name, value.walk(self)))
+
         self.begin_scope()
         try:
-            for (name, value) in zip(function.params, args):
-                if isinstance(name, Symbol):
-                    name = name.name
-                if isinstance(value, AstFunction):
-                    self.scope.add_function(name, value)
-                else:
-                    if type(value) in [int, bool, str, float]:
-                        self.scope.add_symbol(name, (Graph.EMPTY, AstValue(value)))
-                    elif type(value) is tuple and len(value) == 2:
-                        self.scope.add_symbol(name, value)
-                    else:
-                        self.scope.add_symbol(name, value.walk(self))
+            for name, value in bindings:
+                self.define(name, value)
             result = function.body.walk(self)
         finally:
             self.end_scope()
@@ -258,7 +262,6 @@ class Compiler(Walker):
             elif value == 1:
                 if node.op in ['*', '/']:
                     return graph, code_l
-
 
         code = CodeBinary(code_l, node.op, code_r)
         return graph, code

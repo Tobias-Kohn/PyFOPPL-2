@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Jan 2018, Tobias Kohn
-# 20. Jan 2018, Tobias Kohn
+# 21. Jan 2018, Tobias Kohn
 #
 import ast
 from . import Options, foppl_ast
@@ -126,6 +126,15 @@ class Walker(ast.NodeVisitor):
         self.current_line = node.lineno
         return self.visit(node.value)
 
+    def visit_For(self, node: ast.For):
+        if isinstance(node.target, ast.Name):
+            target = node.target.id
+            seq = self.visit(node.iter)
+            body = self.__visit_body(node.body, needs_return=False)
+            return foppl_ast.AstFor(target, seq, body)
+        else:
+            raise SyntaxError("'for' requires a variable")
+
     def visit_FunctionDef(self, node: ast.FunctionDef):
         params = [foppl_ast.AstSymbol(arg.arg) for arg in node.args.args]
         f = foppl_ast.AstFunction(node.name, params, self.__visit_body(node.body))
@@ -147,8 +156,12 @@ class Walker(ast.NodeVisitor):
         raise NotImplemented
 
     def visit_List(self, node: ast.List):
-        print(ast.dump(node))
-        raise NotImplemented
+        if all([isinstance(e, ast.Num) for e in node.elts]):
+            items = [e.n for e in node.elts]
+            return foppl_ast.AstValue(items)
+        else:
+            items = [self.visit(e) for e in node.elts]
+            return foppl_ast.AstVector(items)
 
     def visit_Module(self, node: ast.Module):
         return self.__visit_body(node.body, needs_return=False)
@@ -161,6 +174,14 @@ class Walker(ast.NodeVisitor):
 
     def visit_Return(self, node: ast.Return):
         raise NotImplemented
+
+    def visit_Subscript(self, node: ast.Subscript):
+        seq = self.visit(node.value)
+        if isinstance(node.slice, ast.Index):
+            index = self.visit(node.slice.value)
+            return foppl_ast.AstFunctionCall('get', [seq, index])
+        else:
+            raise SyntaxError("subscripting only supported for indices")
 
     def visit_UnaryOp(self, node: ast.UnaryOp):
         op = _un_op[node.op.__class__]

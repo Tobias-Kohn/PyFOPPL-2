@@ -4,7 +4,7 @@ from foppl import Options, imports
 Options.debug = True
 
 # Import and compile the model:
-import hmm_model_map as foppl_model
+import lin_regr as foppl_model
 
 # Print out the entire model:
 print(foppl_model.model)
