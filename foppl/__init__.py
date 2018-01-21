@@ -4,8 +4,10 @@
 # License: MIT (see LICENSE.txt)
 ##
 # 19. Dec 2017, Tobias Kohn
-# 18. Jan 2018, Tobias Kohn
+# 21. Jan 2018, Tobias Kohn
 #
+from . import test_distributions
+
 class Options(object):
     """
     This class provides flags and general options to control the compilation process.
@@ -32,3 +34,13 @@ class Options(object):
     conditional_suffix = '.data[0]'
 
     debug = False
+
+    dist = test_distributions.dist
+
+# Stubs to make the Python-IDE happy
+
+def normal(mu, sigma): pass
+
+def sample(distr): return 0
+
+def observe(distr, value): pass

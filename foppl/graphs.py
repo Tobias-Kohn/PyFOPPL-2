@@ -68,6 +68,22 @@ Both computations are facilitated by the methods `update` and `update_pdf` of th
 from . import Options, runtime
 from .foppl_distributions import distributions
 
+####################################################################################################
+
+def update_distributions(distributions=None):
+    """
+    In order to compile, we need `dist` pointing to a namespace providing the distributions such
+    as `Normal`, etc. If no such distribution-namespace is provided, a fallback of "test"-distributions
+    is used, allowing the compiler/frontend to be tested without the full backend.
+
+    :param distributions:  A possible namespace providing the distributions.
+    """
+    from . import test_distributions
+    global dist
+    if distributions is None:
+        dist = getattr(Options, 'dist', test_distributions.dist)
+    else:
+        dist = distributions
 
 ####################################################################################################
 
@@ -400,11 +416,11 @@ class Vertex(GraphNode):
             if state[cond.name] != truth_value:
                 return 0.0
 
-        dist = self.evaluate(state)
+        distr = self.evaluate(state)
         if self.evaluate_observation_pdf:
-            log_pdf = self.evaluate_observation_pdf(state, dist)
+            log_pdf = self.evaluate_observation_pdf(state, distr)
         elif self.name in state:
-            log_pdf = dist.log_pdf(state[self.name])
+            log_pdf = distr.log_pdf(state[self.name])
         else:
             log_pdf = 0.0
 
@@ -516,6 +532,8 @@ class Graph(object):
         from .foppl_model import Model
         compute_nodes = self.get_ordered_list_of_all_nodes()
         if result_expr:
+            if hasattr(result_expr, 'to_py'):
+                result_expr = result_expr.to_py()
             result_function = eval(_LAMBDA_PATTERN_.format(result_expr))
         else:
             result_function = None

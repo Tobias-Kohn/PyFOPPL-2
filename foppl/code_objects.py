@@ -62,6 +62,9 @@ class CodeDataSymbol(CodeObject):
     def __repr__(self):
         return self.name
 
+    def to_py(self):
+        return "state['{}']".format(self.name)
+
 
 class CodeDistribution(CodeObject):
 

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 20. Jan 2018, Tobias Kohn
+# 21. Jan 2018, Tobias Kohn
 #
 from . import runtime
 
@@ -33,12 +33,14 @@ class Model(object):
 
     def __init__(self, *, vertices: set, arcs: set, data: set, conditionals: set, compute_nodes: list,
                  result_function = None):
+        from .graphs import update_distributions
         self.vertices = vertices
         self.arcs = arcs
         self.data = data
         self.conditionals = conditionals
         self.compute_nodes = compute_nodes
         self.result_function = result_function
+        update_distributions()
 
     def __repr__(self):
         V = '  '.join(sorted([repr(v) for v in self.vertices]))

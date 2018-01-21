@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 29. Nov 2017, Tobias Kohn
-# 07. Jan 2018, Tobias Kohn
+# 21. Jan 2018, Tobias Kohn
 #
 from .foppl_objects import *
 
@@ -215,11 +215,11 @@ class CharacterStream(object):
                 result += self.next()
 
             if result == 'true':
-                return Value(True)
+                result = Value(True)
             elif result == 'false':
-                return Value(False)
+                result = Value(False)
             elif result == 'nil':
-                return Value(None)
+                result = Value(None)
 
             return result
 
@@ -394,6 +394,9 @@ class Reader(object):
 
             elif type(result) is tuple:
                 return result[0]
+
+            elif type(result) is Value:
+                return result
 
         raise StopIteration()
 

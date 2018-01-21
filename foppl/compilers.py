@@ -270,9 +270,11 @@ class Compiler(Walker):
         graph = Graph.EMPTY
         code = CodeValue(None)
         for item in node.body:
-            g, code = item.walk(self)
-            self._merge_graph(g)
-            graph = g # graph.merge(g)
+            result = item.walk(self)
+            if result:
+                g, code = result
+                self._merge_graph(g)
+                graph = g
         return graph, code
 
     def visit_call_exp(self, node: AstFunctionCall):
@@ -333,6 +335,28 @@ class Compiler(Walker):
         else:
             raise SyntaxError("'get' expects exactly two arguments")
 
+    def visit_call_interleave(self, node: AstFunctionCall):
+        arguments = [arg.walk(self) for arg in node.args]
+        if len(arguments) > 0:
+            graph = merge(*[g for g, _ in arguments])
+            args = []
+            for _, arg in arguments:
+                if isinstance(arg, CodeValue) and type(arg.value) is list:
+                    args.append([CodeValue(v) for v in arg.value])
+                elif isinstance(arg, CodeVector):
+                    args.append(arg.items)
+                elif isinstance(arg, CodeDataSymbol):
+                    args.append([CodeValue(v) for v in arg.node.data])
+                else:
+                    raise TypeError("arguments to 'interleave' must be vectors/lists, not '{}'".format(arg))
+            result = []
+            L = min([len(arg) for arg in args])
+            for i in range(L):
+                result.append(makeVector([arg[i] for arg in args]))
+            return graph, CodeVector(result)
+        else:
+            raise TypeError("'interleave' requires at least one argument")
+
     def visit_call_map(self, node: AstFunctionCall):
         if len(node.args) < 2:
             raise TypeError("not enough arguments for 'map'")
@@ -360,6 +384,28 @@ class Compiler(Walker):
             return graph, result
         else:
             return graph, CodeVector([item for _, item in vec])
+
+    def visit_call_print(self, node: AstFunctionCall):
+        # This is actually for debugging purposes
+        print(', '.join([repr(arg.walk(self)[1]) for arg in node.args]))
+        return Graph.EMPTY, CodeValue(None)
+
+    def visit_call_range(self, node: AstFunctionCall):
+        args = [arg.walk(self) for arg in node.args]
+        if len(args) == 1 and args[0][1].code_type == IntegerType:
+            graph, arg = args[0]
+            if isinstance(arg, CodeValue):
+                n = int(arg.value)
+                return graph, CodeValue(list(range(n)))
+        elif len(args) == 2 and args[0][1].code_type == IntegerType:
+            graph_b, arg_b = args[0]
+            graph_e, arg_e = args[1]
+            graph = merge(graph_b, graph_e)
+            if isinstance(arg_b, CodeValue) and isinstance(arg_e, CodeValue):
+                b = int(arg_b.value)
+                e = int(arg_e.value)
+                return graph, CodeValue(list(range(b, e)))
+        raise TypeError("'range' expects exactly one integer argument")
 
     def visit_call_repeat(self, node: AstFunctionCall):
         if len(node.args) != 2:
@@ -533,7 +579,10 @@ class Compiler(Walker):
             return graph, CodeSqrt(code)
 
     def visit_symbol(self, node: AstSymbol):
-        return self.resolve_symbol(node.name)
+        result = self.resolve_symbol(node.name)
+        if result is None:
+            raise NameError("symbol '{}' not found".format(node.name))
+        return result
 
     def visit_unary(self, node: AstUnary):
         if isinstance(node.item, AstUnary) and node.op == node.item.op:

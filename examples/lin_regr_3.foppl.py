@@ -1,3 +1,5 @@
+from foppl import *  # ignored by the compiler, but keeps the IDE happy
+
 def observe_data(data, slope, bias):
     xn = data[0]
     yn = data[1]

@@ -218,16 +218,22 @@ class Parser(object):
     class ForExpr(FunctionParser):
 
         def parse(self, form: Form):
-            _, assignments = self._parse_bindings(form[1])
             items = [self._parse(f) for f in form[2:]]
             if len(items) == 1:
                 body = items[0]
             else:
                 body = AstBody(items)
-            while len(assignments) > 0:
-                target, source = assignments.pop()
-                body = AstFor(target, source, body)
-            return body
+            if isinstance(form[1], Vector) and len(form[1]) == 2 and isinstance(form[1][0], Vector):
+                _, assignments = self._parse_bindings(form[1])
+                target, source = assignments[0]
+                body = AstLet(assignments[1:], body)
+                return AstFor(target, source, body)
+            else:
+                _, assignments = self._parse_bindings(form[1])
+                while len(assignments) > 0:
+                    target, source = assignments.pop()
+                    body = AstFor(target, source, body)
+                return body
 
     @_register(Symbol.IF)
     class IfExpr(ExprParser):
@@ -322,6 +328,9 @@ class Parser(object):
 
         elif form_type is Symbol:
             return AstSymbol(form.name)
+
+        elif form_type is Value:
+            return AstValue(form.value)
 
         elif form_type in [Vector]:
             values = [self.parse(item) for item in form]
