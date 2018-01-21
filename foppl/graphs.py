@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 20. Jan 2018, Tobias Kohn
+# 21. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -437,6 +437,8 @@ class Graph(object):
         self.conditions = set(conditions)
 
     def __repr__(self):
+        if len(self.vertices) == 0 and len(self.data) == 0 and len(self.conditions) == 0:
+            return "<Graph.EMPTY>"
         V = '  '.join(sorted([repr(v) for v in self.vertices]))
         A = ', '.join(['({}, {})'.format(u.name, v.name) for (u, v) in self.arcs]) if len(self.arcs) > 0 else "-"
         C = '\n  '.join(sorted([repr(v) for v in self.conditions])) if len(self.conditions) > 0 else "-"

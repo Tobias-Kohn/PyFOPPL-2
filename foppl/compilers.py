@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 20. Jan 2018, Tobias Kohn
+# 21. Jan 2018, Tobias Kohn
 #
 import math
 from . import foppl_objects
@@ -150,7 +150,10 @@ class Compiler(Walker):
         if isinstance(value, AstFunction):
             self.scope.add_function(name, value)
         else:
-            graph, expr = value.walk(self)
+            if isinstance(value, Node):
+                graph, expr = value.walk(self)
+            else:
+                graph, expr = value
             if isinstance(expr, CodeSample):
                 v = graph.get_vertex_for_distribution(expr.distribution)
                 if v: v.original_name = name
@@ -349,6 +352,32 @@ class Compiler(Walker):
     def visit_expr(self, node: AstExpr):
         return node.value
 
+    def visit_for(self, node: AstFor):
+        if isinstance(node.sequence, AstValue) and type(node.sequence.value) is list:
+            seq = [(Graph.EMPTY, CodeValue(v)) for v in node.sequence.value]
+        elif isinstance(node.sequence, AstVector):
+            seq = [v.walk(self) for v in node.sequence.items]
+        else:
+            seq_graph, seq = node.sequence.walk(self)
+            if isinstance(seq, CodeValue) and type(seq.value) is list:
+                seq = [(seq_graph, CodeValue(v)) for v in seq.value]
+            elif isinstance(seq, CodeVector):
+                seq = [(seq_graph, v) for v in seq.items]
+            elif isinstance(seq, CodeDataSymbol):
+                seq = [(Graph.EMPTY, CodeValue(v)) for v in seq.node.data]
+            else:
+                raise TypeError("for-loop requires a constant vector/list, not '{}'".format(seq))
+
+        result = Graph.EMPTY, CodeValue(None)
+        self.begin_scope()
+        try:
+            for item in seq:
+                self.define(node.target, item)
+                result = node.body.walk(self)
+        finally:
+            self.end_scope()
+        return result
+
     def visit_functioncall(self, node: AstFunctionCall):
         # NB: some functions are handled directly by visit_call_XXX-methods!
         func = node.function
@@ -428,6 +457,8 @@ class Compiler(Walker):
     def visit_observe(self, node: AstObserve):
         graph, dist = node.distribution.walk(self)
         obs_graph, obs_value = node.value.walk(self)
+        if not isinstance(dist, CodeDistribution):
+            raise TypeError("'observe' requires a distribution as first parameter, not '{}'".format(dist))
         vertex = Vertex(ancestor_graph=merge(graph, obs_graph), distribution=dist, observation=obs_value,
                         conditions=self.current_conditions(), line_number=node.line_number)
         graph = Graph({vertex}).merge(graph)
@@ -436,6 +467,8 @@ class Compiler(Walker):
 
     def visit_sample(self, node: AstSample):
         graph, dist = node.distribution.walk(self)
+        if not isinstance(dist, CodeDistribution):
+            raise TypeError("'sample' requires a distribution as first parameter, not '{}'".format(dist))
         vertex = Vertex(ancestor_graph=graph, distribution=dist, conditions=self.current_conditions(),
                         line_number=node.line_number)
         graph = Graph({vertex}).merge(graph)

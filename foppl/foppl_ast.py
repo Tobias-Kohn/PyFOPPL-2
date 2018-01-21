@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 20. Jan 2018, Tobias Kohn
+# 21. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .foppl_objects import Symbol
@@ -178,7 +178,7 @@ class AstFor(Node):
         self.body = body
 
     def __repr__(self):
-        return "loop({} in {}: {})".format(self.target, repr(self.sequence), repr(self.body))
+        return "for({} in {}: {})".format(self.target, repr(self.sequence), repr(self.body))
 
 
 class AstFunction(Node):
