@@ -199,12 +199,30 @@ class Compiler(Walker):
                 else:
                     if type(value) in [int, bool, str, float]:
                         self.scope.add_symbol(name, (Graph.EMPTY, AstValue(value)))
+                    elif type(value) is tuple and len(value) == 2:
+                        self.scope.add_symbol(name, value)
                     else:
                         self.scope.add_symbol(name, value.walk(self))
             result = function.body.walk(self)
         finally:
             self.end_scope()
         return result
+
+    def _make_sequence(self, node: Node):
+        if isinstance(node, AstValue) and type(node.value) is list:
+            return [(Graph.EMPTY, CodeValue(v)) for v in node.value]
+        elif isinstance(node, AstVector):
+            return [v.walk(self) for v in node.items]
+        else:
+            graph, code = node.walk(self)
+            if isinstance(code, CodeValue) and type(code.value) is list:
+                return [(Graph.EMPTY, CodeValue(v)) for v in code.value]
+            elif isinstance(code, CodeVector):
+                return [(graph, item) for item in code.items]
+            elif isinstance(code, CodeDataSymbol):
+                return [(Graph.EMPTY, CodeValue(v)) for v in code.node.data]
+            else:
+                raise TypeError("cannot resolve '{}' to a sequence".format(repr(node)))
 
     def visit_node(self, node: Node):
         raise NotImplementedError(node)
@@ -312,6 +330,49 @@ class Compiler(Walker):
         else:
             raise SyntaxError("'get' expects exactly two arguments")
 
+    def visit_call_map(self, node: AstFunctionCall):
+        if len(node.args) < 2:
+            raise TypeError("not enough arguments for 'map'")
+        function = node.args[0]
+        if isinstance(function, AstSymbol):
+            f = self.resolve_function(function.name)
+            if f is not None: function = f
+        if not isinstance(function, AstFunction):
+            raise TypeError("first argument to 'map' must be a function, not '{}'".format(repr(function)))
+
+        args = [self._make_sequence(arg) for arg in node.args[1:]]
+        if len(args) > 1:
+            mangled_args = []
+            L = min([len(arg) for arg in args])
+            for i in range(L):
+                mangled_args.append([arg[i] for arg in args])
+            args = mangled_args
+        else:
+            args = [[arg] for arg in args[0]]
+
+        vec = [self.apply_function(function, arg) for arg in args]
+        graph = merge(*[graph for graph, _ in vec])
+        if all([isinstance(item, CodeValue) for _, item in vec]):
+            result = CodeValue([item.value for _, item in vec])
+            return graph, result
+        else:
+            return graph, CodeVector([item for _, item in vec])
+
+    def visit_call_repeat(self, node: AstFunctionCall):
+        if len(node.args) != 2:
+            raise TypeError("wrong number of arguments: 'repeat' requires exactly two arguments, not {}".format(len(node.args)))
+        iter_graph, iter_count = node.args[0].walk(self)
+        if isinstance(iter_count, CodeValue) and iter_count.code_type == IntegerType:
+            n = iter_count.value
+            graph, value = node.args[1].walk(self)
+            graph = graph.merge(iter_graph)
+            if isinstance(value, CodeValue):
+                return graph, CodeValue([value.value] * n)
+            else:
+                return graph, CodeVector([value] * n)
+        else:
+            raise TypeError("first argument of 'repeat' must be an integer")
+
     def visit_call_rest(self, node: AstFunctionCall):
         args = node.args
         if len(args) == 1:
@@ -353,21 +414,7 @@ class Compiler(Walker):
         return node.value
 
     def visit_for(self, node: AstFor):
-        if isinstance(node.sequence, AstValue) and type(node.sequence.value) is list:
-            seq = [(Graph.EMPTY, CodeValue(v)) for v in node.sequence.value]
-        elif isinstance(node.sequence, AstVector):
-            seq = [v.walk(self) for v in node.sequence.items]
-        else:
-            seq_graph, seq = node.sequence.walk(self)
-            if isinstance(seq, CodeValue) and type(seq.value) is list:
-                seq = [(seq_graph, CodeValue(v)) for v in seq.value]
-            elif isinstance(seq, CodeVector):
-                seq = [(seq_graph, v) for v in seq.items]
-            elif isinstance(seq, CodeDataSymbol):
-                seq = [(Graph.EMPTY, CodeValue(v)) for v in seq.node.data]
-            else:
-                raise TypeError("for-loop requires a constant vector/list, not '{}'".format(seq))
-
+        seq = self._make_sequence(node.sequence)
         result = Graph.EMPTY, CodeValue(None)
         self.begin_scope()
         try:

@@ -1,6 +1,5 @@
 (defn observe-data [data slope bias]
-  (let [xn (first data)
-        yn (second data)
+  (let [[xn yn] data
         zn (+ (* slope xn) bias)]
     (observe (normal zn 1.0) yn)))
 
