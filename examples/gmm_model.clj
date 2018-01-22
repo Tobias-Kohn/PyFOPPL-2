@@ -11,6 +11,5 @@
       zs  (map sample-components (repeat 10 pi))
       mus (vector (sample (normal 0 2))
                   (sample (normal 0 2)))]
-  (print zs)
   (for [[y z] (interleave ys zs)] (observe-data y z mus))
   (vector mus zs))
