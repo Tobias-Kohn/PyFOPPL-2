@@ -143,7 +143,7 @@ class ConditionNode(GraphNode):
             name = self.__class__.__gen_symbol__('cond_')
         if ancestors is None:
             ancestors = set()
-        if function:
+        if function is not None:
             if op == '?':
                 op = '>='
             if condition is None:
@@ -165,9 +165,9 @@ class ConditionNode(GraphNode):
                 a._add_dependent_condition(self)
 
     def __repr__(self):
-        if self.function:
+        if self.function is not None:
             result = "{f} {o} 0\n\tFunction: {f}".format(f=repr(self.function), o=self.op)
-        elif self.condition:
+        elif self.condition is not None:
                 result = repr(self.condition)
         else:
             result = "???"
@@ -176,7 +176,7 @@ class ConditionNode(GraphNode):
         if Options.debug:
             result += "\n\tRelation: {}".format(self.op)
             result += "\n\tCode:          {}".format(self.code)
-            if self.function:
+            if self.function is not None:
                 result += "\n\tFunction-Code: {}".format(self.function_code)
             if self.line_number >= 0:
                 result += "\n\tLine: {}".format(self.line_number)
@@ -187,7 +187,7 @@ class ConditionNode(GraphNode):
         return self.function is not None
 
     def update(self, state: dict):
-        if self.function:
+        if self.function is not None:
             f_result = self.evaluate_function(state)
             result = f_result >= 0
             state[self.name + ".function"] = f_result
@@ -294,9 +294,9 @@ class Vertex(GraphNode):
                  ancestor_graph=None, conditions:list=None, line_number:int=-1):
         from . import code_types
         if name is None:
-            name = self.__class__.__gen_symbol__('y' if observation else 'x')
-        if ancestor_graph:
-            if ancestors:
+            name = self.__class__.__gen_symbol__('y' if observation is not None else 'x')
+        if ancestor_graph is not None:
+            if ancestors is not None:
                 ancestors = ancestors.union(ancestor_graph.vertices)
             else:
                 ancestors = ancestor_graph.vertices
@@ -329,7 +329,7 @@ class Vertex(GraphNode):
         self.sample_size = code_type.size if isinstance(code_type, code_types.ListType) else 1
         self.code = _LAMBDA_PATTERN_.format(self.distribution.to_py())
         self.evaluate = eval(self.code)
-        if self.observation:
+        if self.observation is not None:
             obs = self.observation.to_py()
             self.evaluate_observation = eval(_LAMBDA_PATTERN_.format(obs))
             self.evaluate_observation_pdf = eval("lambda state, dist: dist.log_pdf({})".format(obs))
@@ -351,7 +351,7 @@ class Vertex(GraphNode):
                                                repr(self.distribution))
         if len(self.conditions) > 0:
             result += "\tConditions: {}\n".format(', '.join(["{} == {}".format(c.name, v) for c, v in self.conditions]))
-        if self.observation:
+        if self.observation is not None:
             result += "\tObservation: {}\n".format(repr(self.observation))
         if Options.debug:
             result += "\tDependent Conditions: {}\n".format(', '.join(sorted([c.name for c in self.dependent_conditions])))
@@ -361,7 +361,7 @@ class Vertex(GraphNode):
                 self.code,
                 self.sample_size
             )
-            if self.support_size:
+            if self.support_size is not None:
                 result += "\tSupport-size: {}\n".format(self.support_size)
             if self.line_number >= 0:
                 result += "\tLine: {}\n".format(self.line_number)
@@ -415,7 +415,7 @@ class Vertex(GraphNode):
                 return 0.0
 
         distr = self.evaluate(state)
-        if self.evaluate_observation_pdf:
+        if self.evaluate_observation_pdf is not None:
             log_pdf = self.evaluate_observation_pdf(state, distr)
         elif self.name in state:
             log_pdf = distr.log_pdf(state[self.name])
@@ -540,7 +540,7 @@ class Graph(object):
         """
         from .foppl_model import Model
         compute_nodes = self.get_ordered_list_of_all_nodes()
-        if result_expr:
+        if result_expr is not None:
             if hasattr(result_expr, 'to_py'):
                 result_expr = result_expr.to_py()
             result_function = eval(_LAMBDA_PATTERN_.format(result_expr))

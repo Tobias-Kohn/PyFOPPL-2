@@ -4,7 +4,6 @@ from foppl import Options, imports
 Options.debug = True
 
 # Import and compile the model:
-#import brooks_model_1 as foppl_model
 import if_model as foppl_model
 
 # Print out the entire model:

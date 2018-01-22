@@ -49,10 +49,10 @@ class Model(object):
         D = '\n  '.join([repr(u) for u in self.data]) if len(self.data) > 0 else "-"
         graph = "Vertices V:\n  {V}\nArcs A:\n  {A}\n\nConditions C:\n  {C}\n\nData D:\n  {D}\n".format(V=V, A=A, C=C, D=D)
         model = "\nContinuous:  {}\nDiscrete:    {}\nConditional: {}\nConditions: {}\n".format(
-            ', '.join(sorted([v for v in self.gen_cont_vars()])),
-            ', '.join(sorted([v for v in self.gen_disc_vars()])),
-            ', '.join(sorted([v for v in self.gen_if_vars()])),
-            ', '.join(sorted([v for v in self.gen_cond_vars()]))
+            ', '.join(sorted(self.gen_cont_vars())),
+            ', '.join(sorted(self.gen_disc_vars())),
+            ', '.join(sorted(self.gen_if_vars())),
+            ', '.join(sorted(self.gen_cond_vars()))
         )
         return graph + model
 
