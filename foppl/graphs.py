@@ -153,7 +153,9 @@ class ConditionNode(GraphNode):
         self.op = op
         self.condition = condition
         self.function = function
-        self.code = _LAMBDA_PATTERN_.format(condition.to_py() if condition else "None") + Options.conditional_suffix
+        code = (condition.to_py() + Options.conditional_suffix if condition else "None")
+        self.code = _LAMBDA_PATTERN_.format(code)
+        self.full_code = "state['{}'] = {}".format(self.name, code)
         self.function_code = _LAMBDA_PATTERN_.format(function.to_py() if function else "None")
         self.evaluate = eval(self.code)
         self.evaluate_function = eval(self.function_code)
@@ -210,6 +212,7 @@ class DataNode(GraphNode):
         self.code = _LAMBDA_PATTERN_.format(repr(self.data))
         self.evaluate = eval(self.code)
         self.line_number = line_number
+        self.full_code = "state['{}'] = {}".format(self.name, repr(self.data))
 
     def __repr__(self):
         return "{} = {}".format(self.name, repr(self.data))
@@ -330,9 +333,14 @@ class Vertex(GraphNode):
             obs = self.observation.to_py()
             self.evaluate_observation = eval(_LAMBDA_PATTERN_.format(obs))
             self.evaluate_observation_pdf = eval("lambda state, dist: dist.log_pdf({})".format(obs))
+            self.full_code = "state['{}'] = {}".format(self.name, obs)
+            self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf({})".format(self.distribution.to_py(), obs))
         else:
             self.evaluate_observation = None
             self.evaluate_observation_pdf = None
+            code = self.distribution.to_py()
+            self.full_code = "state['{}'] = {}.sample()".format(self.name, code)
+            self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf(state['{}'])".format(code, self.name))
         self.line_number = line_number
 
     def __repr__(self):
@@ -416,6 +424,17 @@ class Vertex(GraphNode):
 
         state['log_pdf'] = state.get('log_pdf', 0.0) + log_pdf
         return log_pdf
+
+    def _get_cond_code(self, body:str):
+        conds = []
+        result = []
+        for cond, truth_value in self.conditions:
+            conds.append(cond.full_code)
+            result.append("state['{}'] == {}".format(cond.name, truth_value))
+        if len(result) > 0:
+            return "{}\nif {}:\n\t{}".format("\n".join(conds), " and ".join(result), body.replace("\n", "\n\t"))
+        else:
+            return body
 
 
 ####################################################################################################

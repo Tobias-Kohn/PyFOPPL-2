@@ -48,10 +48,11 @@ class Model(object):
         C = '\n  '.join(sorted([repr(v) for v in self.conditionals])) if len(self.conditionals) > 0 else "-"
         D = '\n  '.join([repr(u) for u in self.data]) if len(self.data) > 0 else "-"
         graph = "Vertices V:\n  {V}\nArcs A:\n  {A}\n\nConditions C:\n  {C}\n\nData D:\n  {D}\n".format(V=V, A=A, C=C, D=D)
-        model = "\nContinuous:  {}\nDiscrete:    {}\nConditional: {}\n".format(
+        model = "\nContinuous:  {}\nDiscrete:    {}\nConditional: {}\nConditions: {}\n".format(
             ', '.join(sorted([v for v in self.gen_cont_vars()])),
             ', '.join(sorted([v for v in self.gen_disc_vars()])),
             ', '.join(sorted([v for v in self.gen_if_vars()])),
+            ', '.join(sorted([v for v in self.gen_cond_vars()]))
         )
         return graph + model
 
@@ -136,6 +137,9 @@ class Model(object):
     def get_discrete_distributions(self):
         return set([v.distribution_name for v in self.vertices if v.is_discrete])
 
+    def gen_cond_vars(self):
+        return [c.name for c in self.conditionals]
+
     def gen_if_vars(self):
         return [v.name for v in self.vertices if v.is_conditional]
 
@@ -156,6 +160,13 @@ class Model(object):
             state['result'] = self.result_function(state)
         return state
 
+    def gen_prior_samples_code(self):
+        result = []
+        for node in self.compute_nodes:
+            result.append("# {}".format(node.name))
+            result.append(node.full_code)
+        return '\n'.join(result)
+
     def gen_pdf(self, state):
         for node in self.compute_nodes:
             node.update_pdf(state)
@@ -165,3 +176,13 @@ class Model(object):
             return state['log_pdf']
         else:
             return 0.0
+
+    def gen_pdf_code(self):
+        result = []
+        for node in self.compute_nodes:
+            result.append("# {}".format(node.name))
+            if hasattr(node, 'full_code_pdf'):
+                result.append(node.full_code_pdf)
+            else:
+                result.append(node.full_code)
+        return '\n'.join(result)
