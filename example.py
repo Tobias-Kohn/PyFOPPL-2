@@ -4,7 +4,8 @@ from foppl import Options, imports
 Options.debug = True
 
 # Import and compile the model:
-import lin_regr as foppl_model
+#import brooks_model_1 as foppl_model
+import gmm_model as foppl_model
 
 # Print out the entire model:
 print(foppl_model.model)

@@ -4,9 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 21. Jan 2018, Tobias Kohn
+# 22. Jan 2018, Tobias Kohn
 #
 from . import runtime
+import math
 
 # We try to import `networkx` and `matplotlib`. If present, these packages can be used to get a visual
 # representation of the graph. But neither of these packages is actually needed.

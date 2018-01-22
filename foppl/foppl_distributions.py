@@ -8,6 +8,7 @@
 #
 distributions = {
     "Bernoulli": "discrete",
+    "Binomial": "discrete",
     "Categorical": "discrete",
     "Discrete": "discrete",
     "Multinomial": "discrete",
@@ -49,6 +50,7 @@ continuous_distributions = {
 distribution_map = {
     "bernoulli": "Bernoulli",
     "beta": "Beta",
+    "binomial": "Binomial",
     "categorical": "Categorical",
     "cauchy": "Cauchy",
     "dirichlet": "Dirichlet",
@@ -66,6 +68,7 @@ distribution_map = {
 distribution_params = {
     "Bernoulli": ["ps"],
     "Beta": ["alpha", "beta"],
+    "Binomial": ["ps"],
     "Categorical": ["ps"],
     "Cauchy": ["mu", "gamma"],
     "Dirichlet": ["alpha"],

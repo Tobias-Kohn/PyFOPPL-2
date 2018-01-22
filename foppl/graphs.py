@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 21. Jan 2018, Tobias Kohn
+# 22. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -67,6 +67,7 @@ Both computations are facilitated by the methods `update` and `update_pdf` of th
 """
 from . import Options, runtime
 from .foppl_distributions import distributions
+import math
 
 ####################################################################################################
 

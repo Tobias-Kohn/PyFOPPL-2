@@ -210,12 +210,13 @@ class CodeSqrt(CodeObject):
 
     def __init__(self, item: CodeObject):
         self.item = item
+        self.code_type = FloatType()
 
     def __repr__(self):
-        return "sqrt({})".format(repr(self.item))
+        return "math.sqrt({})".format(repr(self.item))
 
     def to_py(self):
-        return "sqrt({})".format(self.item.to_py())
+        return "math.sqrt({})".format(self.item.to_py())
 
 
 class CodeSubscript(CodeObject):

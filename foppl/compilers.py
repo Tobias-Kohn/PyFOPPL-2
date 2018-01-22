@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 21. Jan 2018, Tobias Kohn
+# 22. Jan 2018, Tobias Kohn
 #
 import math
 from . import foppl_objects
@@ -277,6 +277,28 @@ class Compiler(Walker):
                 graph = g
         return graph, code
 
+    def visit_call_conj(self, node: AstFunctionCall):
+        if len(node.args) >= 2:
+            args = [arg.walk(self) for arg in node.args]
+            graph = merge(*[g for g, _ in args])
+            args = [item for _, item in args]
+            seq = args[0]
+            items = args[1:]
+            if isinstance(seq, CodeValue) and type(seq.value) is list:
+                if all([isinstance(item, CodeValue) for item in items]):
+                    return graph, CodeValue(seq.value + [item.value for item in items])
+                else:
+                    return graph, CodeVector([CodeValue(item) for item in seq.value] + items)
+            elif isinstance(seq, CodeVector):
+                return graph, CodeVector(seq.items + items)
+            elif isinstance(seq, CodeDataSymbol):
+                values = seq.node.data
+                if all([isinstance(item, CodeValue) for item in items]):
+                    return graph, CodeValue(values + [item.value for item in items])
+                else:
+                    return graph, CodeVector([CodeValue(item) for item in values] + items)
+        return self.visit_functioncall(node)
+
     def visit_call_exp(self, node: AstFunctionCall):
         if len(node.args) == 1:
             graph, arg = node.args[0].walk(self)
@@ -440,6 +462,10 @@ class Compiler(Walker):
         else:
             raise SyntaxError("'rest' expects exactly one argument")
 
+    def visit_call_sqrt(self, node: AstFunctionCall):
+        node = AstSqrt(node.args[0])
+        return node.walk(self)
+
     def visit_compare(self, node: AstCompare):
         graph_l, code_l = node.left.walk(self)
         graph_r, code_r = node.right.walk(self)
@@ -539,6 +565,12 @@ class Compiler(Walker):
             raise SyntaxError("'loop' requires a function")
 
         iter_count = node.iter_count
+        if type(iter_count) is not int:
+            g, n = iter_count.walk(self)
+            if isinstance(n, CodeValue) and type(n.value) is int and g.is_empty:
+                iter_count = n.value
+            else:
+                raise TypeError("'loop' requires a constant integer value")
         if iter_count == 0:
             return Graph.EMPTY, CodeValue(None)
 

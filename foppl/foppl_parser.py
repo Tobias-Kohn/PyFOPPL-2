@@ -43,6 +43,14 @@ class ExprParser(object):
     def parse(self, form: Form):
         f = form.head
 
+        if f.name in ["add", "sub", "mul", "div"]:
+            f = {
+                "add": Symbol.PLUS,
+                "sub": Symbol.MINUS,
+                "mul": Symbol.MULTIPLY,
+                "div": Symbol.DIVIDE,
+            }[f.name]
+
         if f in [Symbol.PLUS, Symbol.MINUS, Symbol.NOT] and len(form) == 2:
             return AstUnary(f, self._parse(form[1]))
 
@@ -285,10 +293,10 @@ class Parser(object):
         def parse(self, form: Form):
             if len(form) >= 4:
                 iter_count = self._parse(form[1])
-                if isinstance(iter_count, AstValue):
-                    iter_count = iter_count.value
-                else:
-                    raise SyntaxError("you must provide a literal value for the number of iterations")
+                #if isinstance(iter_count, AstValue):
+                #    iter_count = iter_count.value
+                #else:
+                #    raise SyntaxError("you must provide a literal value for the number of iterations")
                 arg = self._parse(form[2])
                 function = self._parse(form[3])
                 args = [self._parse(a) for a in form[4:]]

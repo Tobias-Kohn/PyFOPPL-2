@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Jan 2018, Tobias Kohn
-# 21. Jan 2018, Tobias Kohn
+# 22. Jan 2018, Tobias Kohn
 #
 import math as _math
 import random as _random
@@ -17,10 +17,28 @@ class dist(object):
     to test the frontend/compiler without the sophisticated backend doing actual inference.
     """
 
+    class Dummy(object):
+
+        def __init__(self, *args):
+            pass
+
+        def log_pdf(self, value):
+            return 0
+
+        def sample(self):
+            return 1
+
+    Binomial = Dummy
+    Dirichlet = Dummy
+    Gamma = Dummy
+
     class Categorical(object):
 
         def __init__(self, ps):
-            self.ps = ps
+            if type(ps) is list:
+                self.ps = ps
+            else:
+                self.ps = [ps]
 
         def log_pdf(self, value):
             if type(value) is int and 0 <= value < len(self.ps):
