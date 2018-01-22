@@ -141,13 +141,13 @@ class Model(object):
         return [c.name for c in self.conditionals]
 
     def gen_if_vars(self):
-        return [v.name for v in self.vertices if v.is_conditional]
+        return [v.name for v in self.vertices if v.is_conditional and v.is_sampled]
 
     def gen_cont_vars(self):
-        return [v.name for v in self.vertices if v.is_continuous and not v.is_conditional]
+        return [v.name for v in self.vertices if v.is_continuous and not v.is_conditional and v.is_sampled]
 
     def gen_disc_vars(self):
-        return [v.name for v in self.vertices if v.is_discrete and not v.is_conditional]
+        return [v.name for v in self.vertices if v.is_discrete and not v.is_conditional and v.is_sampled]
 
     def gen_vars(self):
         return [v.name for v in self.vertices if v.is_sampled]
