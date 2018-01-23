@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 22. Jan 2018, Tobias Kohn
+# 23. Jan 2018, Tobias Kohn
 #
 import math
 from . import foppl_objects
@@ -104,7 +104,14 @@ class Compiler(Walker):
         '**': lambda x, y: x ** y,
         'and': lambda x, y: x & y,
         'or':  lambda x, y: x | y,
-        'xor': lambda x, y: x ^ y
+        'xor': lambda x, y: x ^ y,
+    }
+
+    __vector_ops = {
+        'add': lambda x, y: x + y,
+        'sub': lambda x, y: x - y,
+        'mul': lambda x, y: x * y,
+        'div': lambda x, y: x / y,
     }
 
     def __init__(self):
@@ -407,6 +414,22 @@ class Compiler(Walker):
         else:
             return graph, CodeVector([item for _, item in vec])
 
+    def visit_call_matrix_functions(self, node: AstFunctionCall):
+        name = node.function[7:]
+        if name in self.__vector_ops and len(node.args) == 2:
+            op = self.__vector_ops[name]
+            args = [arg.walk(self) for arg in node.args]
+            graph = merge(*[g for g, _ in args])
+            _, first, _, second = args
+            if isinstance(first.code_type, SequenceType) and isinstance(second.code_type, SequenceType) and \
+                    first.code_type.size == second.code_type.size:
+                pass
+            elif isinstance(first.code_type, SequenceType) and isinstance(second.code_type, NumericType):
+                pass
+            elif isinstance(first.code_type, NumericType) and isinstance(second.code_type, SequenceType):
+                pass
+        return self.visit_functioncall(node)
+
     def visit_call_print(self, node: AstFunctionCall):
         # This is actually for debugging purposes
         print(', '.join([repr(arg.walk(self)[1]) for arg in node.args]))
@@ -638,8 +661,9 @@ class Compiler(Walker):
 
     def visit_value(self, node: AstValue):
         value = node.value
-        if type(value) is list:
+        if type(value) is list and (len(value) > 3 or any([type(item) is list for item in value])):
             value = DataNode(data=value)
+            self._merge_graph(Graph(set(), data={value}))
             return Graph(set(), data={value}), CodeDataSymbol(value)
         else:
             return Graph.EMPTY, CodeValue(node.value)

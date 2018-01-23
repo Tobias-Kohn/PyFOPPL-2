@@ -4,10 +4,18 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 20. Jan 2018, Tobias Kohn
+# 22. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .code_types import *
+
+##############################################################################
+
+def is_vector(item):
+    return isinstance(item, CodeVector) or (isinstance(item, CodeValue) and type(item.value) is list)
+
+
+##############################################################################
 
 class CodeObject(object):
 
@@ -103,13 +111,80 @@ class CodeFunctionCall(CodeObject):
             args = [args]
         self.name = name
         self.args = args
-        self.code_type = AnyType()
+        self.code_type = self._get_code_type()
 
     def __repr__(self):
         return "{}({})".format(self.name, ', '.join([repr(a) for a in self.args]))
 
+    def _get_code_type(self):
+        name = "_type_" + self.name.lower().replace('/', '_').replace('.', '_')
+        method = getattr(self, name, None)
+        if method is not None:
+            return method()
+        else:
+            return AnyType()
+
     def to_py(self):
         return "{}({})".format(self.name, ', '.join([a.to_py() for a in self.args]))
+
+    def _type_elementwise_ops(self):
+        if len(self.args) == 0:
+            return AnyType()
+        elif len(self.args) == 1:
+            return self.args[0].code_type
+        elif len(self.args) >= 2:
+            if all([is_vector(arg) for arg in self.args]):
+                return union(*[arg.code_type for arg in self.args])
+        return AnyType()
+
+    def _type_elementwise_unary(self):
+        if len(self.args) == 1:
+            arg = self.args[0].code_type
+            if isinstance(arg, SequenceType):
+                return ListType(FloatType, arg.size)
+            else:
+                return arg
+        else:
+            raise TypeError("too many arguments for '{}'".format(self.name))
+
+    def _type_elementwise_compare(self):
+        return AnyType()
+
+    def _type_matrix_add(self):
+        return self._type_elementwise_ops()
+
+    def _type_matrix_sub(self):
+        return self._type_elementwise_ops()
+    
+    def _type_matrix_mul(self):
+        return self._type_elementwise_ops()
+
+    def _type_matrix_div(self):
+        return self._type_elementwise_ops()
+
+    def _type_matrix_exp(self):
+        return self._type_elementwise_unary()
+
+    def _type_matrix_log(self):
+        return self._type_elementwise_unary()
+
+    def _type_matrix_ge(self):
+        return self._type_elementwise_compare()
+
+    def _type_matrix_mmul(self):
+        is_tuple = lambda t: type(t) is tuple and len(t) == 2
+
+        if len(self.args) == 2:
+            d0, d1 = [arg.code_type.dimension() for arg in self.args]
+            if is_tuple(d0) and is_tuple(d1):
+                if d0[1] == d1[0] or d0[1] is None or d1[0] is None:
+                    return ListType(ListType(FloatType(), d1[0]), d0[0])
+
+            elif is_tuple(d0) and type(d1) is int:
+                if d0[1] == d1 or d0[1] is None or d1 is None:
+                    return ListType(FloatType(), d0[0])
+
+        return AnyType()
 
 
 class CodeIf(CodeObject):
@@ -301,6 +376,12 @@ class CodeValue(CodeObject):
             return len(self.value)
         else:
             return 0
+
+    def dimension(self):
+        if type(self.value) is list:
+            pass
+        else:
+            return ()
 
     def __repr__(self):
         return repr(self.value)
