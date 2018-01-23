@@ -4,7 +4,7 @@ from foppl import Options, imports
 Options.debug = True
 
 # Import and compile the model:
-import if_model as foppl_model
+import neural_net_model as foppl_model
 
 # Print out the entire model:
 print(foppl_model.model)

@@ -12,26 +12,4 @@ model.
 """
 import math
 from .test_distributions import dist   # Used as a stand-in to test the models
-
-class matrix(object):
-
-    def add(self, *args):
-        pass
-
-    def sub(self, *args):
-        pass
-
-    def mul(self, *args):
-        pass
-
-    def div(self, *args):
-        pass
-
-    def mmul(self, *args):
-        pass
-
-    def exp(self, *args):
-        pass
-
-    def ge(self, *args):
-        pass
+from . import foppl_linalg as matrix
