@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 22. Jan 2018, Tobias Kohn
+# 23. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -185,6 +185,14 @@ class ConditionNode(GraphNode):
     @property
     def has_function(self):
         return self.function is not None
+
+    @property
+    def is_continuous(self):
+        return all([a.is_continuous for a in self.ancestors])
+
+    @property
+    def is_discrete(self):
+        return not self.is_continuous
 
     def update(self, state: dict):
         if self.function is not None:
