@@ -17,7 +17,7 @@ print(foppl_model.model.gen_pdf_code())
 print("=" * 30)
 state = foppl_model.model.gen_prior_samples()
 pdf = foppl_model.model.gen_pdf(state)
-print("Result: {}\nPDF: {}".format(state.get('result', '?'), pdf))
+print("Result: {}\nPDF: {}".format(foppl_model.model.get_result(state), pdf))
 
 print("=" * 30)
 

@@ -156,8 +156,6 @@ class Model(object):
         state = {}
         for node in self.compute_nodes:
             node.update(state)
-        if self.result_function is not None:
-            state['result'] = self.result_function(state)
         return state
 
     def gen_prior_samples_code(self):
@@ -170,8 +168,6 @@ class Model(object):
     def gen_pdf(self, state):
         for node in self.compute_nodes:
             node.update_pdf(state)
-        if self.result_function is not None:
-            state['result'] = self.result_function(state)
         if 'log_pdf' in state:
             return state['log_pdf']
         else:
@@ -186,3 +182,9 @@ class Model(object):
             else:
                 result.append(node.full_code)
         return '\n'.join(result)
+
+    def get_result(self, state):
+        if self.result_function is not None:
+            return self.result_function(state)
+        else:
+            return None
