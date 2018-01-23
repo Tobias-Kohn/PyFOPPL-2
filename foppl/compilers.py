@@ -377,7 +377,7 @@ class Compiler(Walker):
                 elif isinstance(arg, CodeDataSymbol):
                     args.append([CodeValue(v) for v in arg.node.data])
                 else:
-                    raise TypeError("arguments to 'interleave' must be vectors/lists, not '{}'".format(arg))
+                    raise TypeError("arguments to 'interleave' must be vectors/lists, not '{}'".format(arg.code_type))
             result = []
             L = min([len(arg) for arg in args])
             for i in range(L):
@@ -432,7 +432,7 @@ class Compiler(Walker):
                         (isinstance(second, CodeValue) or isinstance(second, CodeVector)):
                     left = first.value if isinstance(first, CodeValue) else first.items
                     right = second.value if isinstance(second, CodeValue) else second.items
-                    return CodeVector([makeBinary(u, name, v) for u, v in zip(left, right)])
+                    return graph, CodeVector([makeBinary(u, name, v) for u, v in zip(left, right)])
 
             elif isinstance(first.code_type, SequenceType) and isinstance(second.code_type, NumericType):
 
@@ -442,7 +442,7 @@ class Compiler(Walker):
 
                 if isinstance(first, CodeValue) or isinstance(first, CodeVector):
                     left = first.value if isinstance(first, CodeValue) else first.items
-                    return CodeVector([makeBinary(u, name, second) for u in left])
+                    return graph, CodeVector([makeBinary(u, name, second) for u in left])
 
             elif isinstance(first.code_type, NumericType) and isinstance(second.code_type, SequenceType):
 
@@ -452,7 +452,31 @@ class Compiler(Walker):
 
                 if isinstance(second, CodeValue) or isinstance(second, CodeVector):
                     right = second.value if isinstance(second, CodeValue) else second.items
-                    return CodeVector([makeBinary(first, name, u) for u in right])
+                    return graph, CodeVector([makeBinary(first, name, u) for u in right])
+
+        elif name == 'mmul':
+            args = [arg.walk(self) for arg in node.args]
+            graph = merge(*[g for g, _ in args])
+            first, second = args
+            first, second = first[1], second[1]
+            if isinstance(first, CodeVector):
+                left = first.items
+            elif isinstance(first, CodeValue):
+                left = first.value
+            elif isinstance(first, CodeDataSymbol):
+                left = first.node.data
+            else:
+                left = None
+
+            if type(left) is list and is_vector(second):
+                result = []
+                for item in left:
+                    value = CodeValue(0)
+                    for i in range(len(item)):
+                        v = makeBinary(item[i], '*', second[i])
+                        value = makeBinary(value, '+', v)
+                    result.append(value)
+                return graph, makeVector(result)
 
         return self.visit_functioncall(node)
 
@@ -492,6 +516,17 @@ class Compiler(Walker):
                 return graph, CodeVector([value] * n)
         else:
             raise TypeError("first argument of 'repeat' must be an integer")
+
+    def visit_call_repeatedly(self, node: AstFunctionCall):
+        if len(node.args) != 2:
+            raise TypeError("wrong number of arguments: 'repeatedly' requires exactly two arguments, not {}".format(len(node.args)))
+        iter_graph, iter_count = node.args[0].walk(self)
+        if isinstance(iter_count, CodeValue) and iter_count.code_type == IntegerType:
+            n = iter_count.value
+            graph, code = AstVector([node.args[1]] * n).walk(self)
+            return graph.merge(iter_graph), code
+        else:
+            raise TypeError("first argument of 'repeatedly' must be an integer")
 
     def visit_call_rest(self, node: AstFunctionCall):
         args = node.args

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 22. Jan 2018, Tobias Kohn
+# 23. Jan 2018, Tobias Kohn
 #
 from . import runtime
 from .basic_imports import *
@@ -141,13 +141,13 @@ class Model(object):
         return [c.name for c in self.conditionals]
 
     def gen_if_vars(self):
-        return [v.name for v in self.vertices if v.is_conditional and v.is_sampled]
+        return [v.name for v in self.vertices if v.is_conditional and v.is_sampled and v.is_continuous]
 
     def gen_cont_vars(self):
         return [v.name for v in self.vertices if v.is_continuous and not v.is_conditional and v.is_sampled]
 
     def gen_disc_vars(self):
-        return [v.name for v in self.vertices if v.is_discrete and not v.is_conditional and v.is_sampled]
+        return [v.name for v in self.vertices if v.is_discrete and v.is_sampled]
 
     def gen_vars(self):
         return [v.name for v in self.vertices if v.is_sampled]
