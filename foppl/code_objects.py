@@ -366,8 +366,10 @@ class CodeSubscript(CodeObject):
     def to_py(self):
         if type(self.index) in [int, float]:
             index = repr(int(self.index))
+        elif isinstance(self.index, CodeValue) and self.index.value in [int, float]:
+            index = repr(int(self.index.value))
         elif isinstance(self.index, CodeObject):
-            index = self.index.to_py()
+            index = "runtime.index({})".format(self.index.to_py())
         else:
             raise TypeError("invalid index: '{}'".format(self.index))
         return "{}[{}]".format(self.seq.to_py(), index)
