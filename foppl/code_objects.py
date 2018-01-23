@@ -156,9 +156,6 @@ class CodeFunctionCall(CodeObject):
         if all([is_vector(arg) for arg in self.args]):
             return union(*[arg.code_type for arg in self.args])
 
-        print("ADD")
-        print("-->", [arg.code_type for arg in self.args])
-        print("   ", self.args)
         return AnyType()
 
     def _type_elementwise_unary(self):
@@ -211,10 +208,22 @@ class CodeFunctionCall(CodeObject):
             elif type(d0) is int and type(d1) is int:
                 return FloatType()
 
-        print("MMUL")
-        print("-->", [arg.code_type for arg in self.args])
-        print("   ", self.args)
+            elif type(d0) is tuple and d1 is None and isinstance(self.args[1].code_type, SequenceType) and \
+                    isinstance(self.args[1].code_type.item_type, NumericType):
+                return ListType(FloatType(), d0[0])
+
         return AnyType()
+
+    def _type_zip(self):
+        if len(self.args) > 0 and all([isinstance(arg.code_type, SequenceType) for arg in self.args]):
+            item_type = self.args[0].code_type.item_type
+            size = self.args[0].code_type.size
+            for arg in self.args[1:]:
+                size = min(size, arg.code_type.size) if size is not None and arg.code_type.size is not None else None
+                item_type = item_type.union(arg.code_type.item_type)
+            return ListType(ListType(item_type, len(self.args)), size)
+        else:
+            return AnyType()
 
 
 class CodeIf(CodeObject):
@@ -472,6 +481,10 @@ def makeBinary(left, op: str, right):
     if op == 'sub': op = '-'
     if op == 'mul': op = '*'
     if op == 'div': op = '/'
+    if op == 'ge': op = '>='
+    if op == 'gt': op = '>'
+    if op == 'le': op = '<='
+    if op == 'lt': op = '<'
 
     if type(left) in [int, float] and isinstance(right, CodeValue) and right.value in [int, float]:
         return CodeValue(_binary_ops[op](left, right.value))

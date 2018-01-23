@@ -232,6 +232,8 @@ class Compiler(Walker):
                 return [(graph, item) for item in code.items]
             elif isinstance(code, CodeDataSymbol):
                 return [(Graph.EMPTY, CodeValue(v)) for v in code.node.data]
+            elif isinstance(code.code_type, SequenceType) and code.code_type.size is not None:
+                return [(graph, CodeSubscript(code, CodeValue(i))) for i in range(code.code_type.size)]
             else:
                 raise TypeError("cannot resolve '{}' to a sequence".format(repr(node)))
 
@@ -368,21 +370,24 @@ class Compiler(Walker):
         arguments = [arg.walk(self) for arg in node.args]
         if len(arguments) > 0:
             graph = merge(*[g for g, _ in arguments])
-            args = []
-            for _, arg in arguments:
-                if isinstance(arg, CodeValue) and type(arg.value) is list:
-                    args.append([CodeValue(v) for v in arg.value])
-                elif isinstance(arg, CodeVector):
-                    args.append(arg.items)
-                elif isinstance(arg, CodeDataSymbol):
-                    args.append([CodeValue(v) for v in arg.node.data])
-                else:
-                    raise TypeError("arguments to 'interleave' must be vectors/lists, not '{}'".format(arg.code_type))
-            result = []
-            L = min([len(arg) for arg in args])
-            for i in range(L):
-                result.append(makeVector([arg[i] for arg in args]))
-            return graph, CodeVector(result)
+            if all([is_vector(item) for item in arguments]):
+                args = []
+                for _, arg in arguments:
+                    if isinstance(arg, CodeValue) and type(arg.value) is list:
+                        args.append([CodeValue(v) for v in arg.value])
+                    elif isinstance(arg, CodeVector):
+                        args.append(arg.items)
+                    elif isinstance(arg, CodeDataSymbol):
+                        args.append([CodeValue(v) for v in arg.node.data])
+                    else:
+                        raise TypeError("arguments to 'interleave' must be vectors/lists, not '{}'".format(arg.code_type))
+                result = []
+                L = min([len(arg) for arg in args])
+                for i in range(L):
+                    result.append(makeVector([arg[i] for arg in args]))
+                return graph, CodeVector(result)
+            else:
+                return graph, CodeFunctionCall('zip', [item for _, item in arguments])
         else:
             raise TypeError("'interleave' requires at least one argument")
 
@@ -454,7 +459,7 @@ class Compiler(Walker):
                     right = second.value if isinstance(second, CodeValue) else second.items
                     return graph, CodeVector([makeBinary(first, name, u) for u in right])
 
-        elif name == 'mmul':
+        elif name == 'mmul' and len(node.args) == 2:
             args = [arg.walk(self) for arg in node.args]
             graph = merge(*[g for g, _ in args])
             first, second = args
@@ -477,6 +482,25 @@ class Compiler(Walker):
                         value = makeBinary(value, '+', v)
                     result.append(value)
                 return graph, makeVector(result)
+
+        elif name in ['ge', 'gt', 'lt', 'le'] and len(node.args) == 2:
+            args = [arg.walk(self) for arg in node.args]
+            graph = merge(*[g for g, _ in args])
+            first, second = args
+            first, second = first[1], second[1]
+
+            if isinstance(first.code_type, SequenceType) and isinstance(second, CodeValue) and \
+                            type(second.value) in [int, float]:
+                if isinstance(first, CodeValue) and type(first.value) is list:
+                    first = [CodeValue(item) for item in first.value]
+                elif isinstance(first, CodeVector):
+                    first = first.items
+                elif first.code_type.size is not None:
+                    first = [CodeSubscript(first, CodeValue(i)) for i in range(first.code_type.size)]
+                else:
+                    first = None
+                if first is not None:
+                    return graph, makeVector([makeBinary(item, name, second) for item in first])
 
         return self.visit_functioncall(node)
 
@@ -579,6 +603,20 @@ class Compiler(Walker):
         try:
             for item in seq:
                 self.define(node.target, item)
+                result = node.body.walk(self)
+        finally:
+            self.end_scope()
+        return result
+
+    def visit_multifor(self, node: AstMultiFor):
+        sources = [self._make_sequence(source) for source in node.sources]
+        iter_count = min([len(source) for source in sources])
+        result = Graph.EMPTY, CodeValue(None)
+        self.begin_scope()
+        try:
+            for i in range(iter_count):
+                for j in range(len(node.targets)):
+                    self.define(node.targets[j], sources[j][i])
                 result = node.body.walk(self)
         finally:
             self.end_scope()

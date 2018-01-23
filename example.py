@@ -4,7 +4,8 @@ from foppl import Options, imports
 Options.debug = True
 
 # Import and compile the model:
-import onegauss as foppl_model
+#import onegauss as foppl_model
+import neural_net_model_3 as foppl_model
 
 # Print out the entire model:
 print(foppl_model.model)
