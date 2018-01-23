@@ -420,14 +420,40 @@ class Compiler(Walker):
             op = self.__vector_ops[name]
             args = [arg.walk(self) for arg in node.args]
             graph = merge(*[g for g, _ in args])
-            _, first, _, second = args
+            first, second = args
+            first, second = first[1], second[1]
             if isinstance(first.code_type, SequenceType) and isinstance(second.code_type, SequenceType) and \
                     first.code_type.size == second.code_type.size:
-                pass
+
+                if isinstance(first, CodeValue) and isinstance(second, CodeValue):
+                    return graph, CodeValue([op(u, v) for u, v in zip(first.value, second.value)])
+
+                if (isinstance(first, CodeValue) or isinstance(first, CodeVector)) and \
+                        (isinstance(second, CodeValue) or isinstance(second, CodeVector)):
+                    left = first.value if isinstance(first, CodeValue) else first.items
+                    right = second.value if isinstance(second, CodeValue) else second.items
+                    return CodeVector([makeBinary(u, name, v) for u, v in zip(left, right)])
+
             elif isinstance(first.code_type, SequenceType) and isinstance(second.code_type, NumericType):
-                pass
+
+                if isinstance(first, CodeValue) and isinstance(second, CodeValue):
+                    right = second.value
+                    return graph, CodeValue([op(u, right) for u in first.value])
+
+                if isinstance(first, CodeValue) or isinstance(first, CodeVector):
+                    left = first.value if isinstance(first, CodeValue) else first.items
+                    return CodeVector([makeBinary(u, name, second) for u in left])
+
             elif isinstance(first.code_type, NumericType) and isinstance(second.code_type, SequenceType):
-                pass
+
+                if isinstance(first, CodeValue) and isinstance(second, CodeValue):
+                    left = second.value
+                    return graph, CodeValue([op(left, u) for u in second.value])
+
+                if isinstance(second, CodeValue) or isinstance(second, CodeVector):
+                    right = second.value if isinstance(second, CodeValue) else second.items
+                    return CodeVector([makeBinary(first, name, u) for u in right])
+
         return self.visit_functioncall(node)
 
     def visit_call_print(self, node: AstFunctionCall):

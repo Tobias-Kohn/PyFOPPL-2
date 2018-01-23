@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 22. Jan 2018, Tobias Kohn
+# 23. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .code_types import *
@@ -125,16 +125,26 @@ class CodeFunctionCall(CodeObject):
             return AnyType()
 
     def to_py(self):
-        return "{}({})".format(self.name, ', '.join([a.to_py() for a in self.args]))
+        name = self.name.replace('/', '.')
+        return "{}({})".format(name, ', '.join([a.to_py() for a in self.args]))
 
     def _type_elementwise_ops(self):
         if len(self.args) == 0:
             return AnyType()
         elif len(self.args) == 1:
             return self.args[0].code_type
-        elif len(self.args) >= 2:
-            if all([is_vector(arg) for arg in self.args]):
-                return union(*[arg.code_type for arg in self.args])
+        elif len(self.args) == 2:
+            left = self.args[0].code_type
+            right = self.args[1].code_type
+            if isinstance(left, SequenceType) and isinstance(right, NumericType):
+                return left
+            if isinstance(left, NumericType) and isinstance(right, SequenceType):
+                return right
+            if left == right:
+                return left
+
+        if all([is_vector(arg) for arg in self.args]):
+            return union(*[arg.code_type for arg in self.args])
         return AnyType()
 
     def _type_elementwise_unary(self):
@@ -148,7 +158,7 @@ class CodeFunctionCall(CodeObject):
             raise TypeError("too many arguments for '{}'".format(self.name))
 
     def _type_elementwise_compare(self):
-        return AnyType()
+        return self._type_elementwise_ops()
 
     def _type_matrix_add(self):
         return self._type_elementwise_ops()
@@ -416,6 +426,59 @@ class CodeVector(CodeObject):
 
 
 #################################################################################################33
+
+_binary_ops = {
+    '+': lambda x, y: x + y,
+    '-': lambda x, y: x - y,
+    '*': lambda x, y: x * y,
+    '/': lambda x, y: x / y,
+    '**': lambda x, y: x ** y,
+    'and': lambda x, y: x & y,
+    'or': lambda x, y: x | y,
+    'xor': lambda x, y: x ^ y,
+    'add': lambda x, y: x + y,
+    'sub': lambda x, y: x - y,
+    'mul': lambda x, y: x * y,
+    'div': lambda x, y: x / y,
+}
+
+
+def makeBinary(left, op: str, right):
+    if type(left) in [int, float] and isinstance(right, CodeValue) and right.value in [int, float]:
+        return CodeValue(_binary_ops[op](left, right.value))
+
+    if type(right) in [int, float] and isinstance(left, CodeValue) and left.value in [int, float]:
+        return CodeValue(_binary_ops[op](left.value, right))
+
+    if type(left) in [int, float] and type(right) in [int, float]:
+        return CodeValue(_binary_ops[op](left, right))
+
+    if not isinstance(left, CodeObject):
+        left = CodeValue(left)
+
+    if not isinstance(right, CodeObject):
+        right = CodeValue(right)
+
+    if isinstance(left, CodeValue) and isinstance(right, CodeValue) and op in _binary_ops:
+        L, R = left.value, right.value
+        if type(L) in [int, float] and type(R) in [int, float]:
+            return CodeValue(_binary_ops[op](L, R))
+
+    if isinstance(left, CodeValue) and left.value in [0, 1]:
+        if left.value == 0 and op in ['+', 'add']:
+            return right
+        if left.value == 1 and op in ['*', 'mul']:
+            return right
+        if op == '**':
+            return left
+
+    if isinstance(right, CodeValue) and right.value in [0, 1]:
+        if right.value == 0 and op in ['+', '-', 'add', 'sub']:
+            return left
+        if right.value == 1 and op in ['*', '/', 'mul', 'div', '**']:
+            return left
+
+    return CodeBinary(left, op, right)
 
 def makeSubscript(seq, index):
     if not isinstance(index.code_type, IntegerType):

@@ -410,28 +410,36 @@ class Vertex(GraphNode):
         return self.observation is None
 
     def update(self, state: dict):
-        if self.evaluate_observation:
-            result = self.evaluate_observation(state)
-        else:
-            result = self.evaluate(state).sample()
-        state[self.name] = result
-        return result
+        try:
+            if self.evaluate_observation:
+                result = self.evaluate_observation(state)
+            else:
+                result = self.evaluate(state).sample()
+            state[self.name] = result
+            return result
+        except:
+            print("ERROR in {}:\n ".format(self.name), self.full_code)
+            raise
 
     def update_pdf(self, state: dict):
-        for cond, truth_value in self.conditions:
-            if state[cond.name] != truth_value:
-                return 0.0
+        try:
+            for cond, truth_value in self.conditions:
+                if state[cond.name] != truth_value:
+                    return 0.0
 
-        distr = self.evaluate(state)
-        if self.evaluate_observation_pdf is not None:
-            log_pdf = self.evaluate_observation_pdf(state, distr)
-        elif self.name in state:
-            log_pdf = distr.log_pdf(state[self.name])
-        else:
-            log_pdf = 0.0
+            distr = self.evaluate(state)
+            if self.evaluate_observation_pdf is not None:
+                log_pdf = self.evaluate_observation_pdf(state, distr)
+            elif self.name in state:
+                log_pdf = distr.log_pdf(state[self.name])
+            else:
+                log_pdf = 0.0
 
-        state['log_pdf'] = state.get('log_pdf', 0.0) + log_pdf
-        return log_pdf
+            state['log_pdf'] = state.get('log_pdf', 0.0) + log_pdf
+            return log_pdf
+        except:
+            print("ERROR in {}:\n ".format(self.name), self.full_code)
+            raise
 
     def _get_cond_code(self, body:str):
         conds = []
