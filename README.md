@@ -66,7 +66,7 @@ state = my_model.model.gen_prior_samples()
 ## License
 
 This project is released unter the _MIT_-license. 
-See [LICENSE](LICENSE.txt).
+See [LICENSE](LICENSE).
 
 ## Contributors
 
