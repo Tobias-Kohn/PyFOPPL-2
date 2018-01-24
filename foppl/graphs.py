@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 23. Jan 2018, Tobias Kohn
+# 24. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -112,6 +112,8 @@ class GraphNode(object):
     def update(self, state: dict):
         result = self.evaluate(state)
         state[self.name] = result
+        if Options.debug:
+            print("[{}]  => {}".format(self.name, result))
         return result
 
     def update_pdf(self, state: dict):
@@ -199,8 +201,15 @@ class ConditionNode(GraphNode):
             f_result = self.evaluate_function(state)
             result = f_result >= 0
             state[self.name + ".function"] = f_result
+            if Options.debug:
+                print("[{}] [function] {}".format(self.name, repr(self.function)))
+                print("[{}] [function] {} => {}".format(self.name, self.function.to_py(state), repr(f_result)))
+                print("[{}] {} >= 0 => {}".format(self.name, repr(f_result), result))
         else:
             result = self.evaluate(state)
+            if Options.debug:
+                print("[{}] {}".format(self.name, repr(self.condition)))
+                print("[{}] {} => {}".format(self.name, self.condition.to_py(state), result))
         state[self.name] = result
         return result
 
@@ -413,8 +422,13 @@ class Vertex(GraphNode):
         try:
             if self.evaluate_observation:
                 result = self.evaluate_observation(state)
+                if Options.debug:
+                    #print("[{}] distr = {}".format(self.name, self.distribution.to_py(state)))
+                    print("[{}] observe {} => {}".format(self.name, self.observation.to_py(state), result))
             else:
                 result = self.evaluate(state).sample()
+                if Options.debug:
+                    print("[{}] {}.sample() => {}".format(self.name, self.distribution.to_py(state), result))
             state[self.name] = result
             return result
         except:
@@ -423,9 +437,16 @@ class Vertex(GraphNode):
 
     def update_pdf(self, state: dict):
         try:
-            for cond, truth_value in self.conditions:
-                if state[cond.name] != truth_value:
-                    return 0.0
+            if Options.debug:
+                for cond, truth_value in self.conditions:
+                    print("[{}/P]   if {} == {}".format(self.name, repr(state[cond.name]), truth_value))
+                    if state[cond.name] != truth_value:
+                        print("[{}/P]     log_pdf += 0.0".format(self.name))
+                        return 0.0
+            else:
+                for cond, truth_value in self.conditions:
+                    if state[cond.name] != truth_value:
+                        return 0.0
 
             distr = self.evaluate(state)
             if self.evaluate_observation_pdf is not None:
@@ -434,6 +455,15 @@ class Vertex(GraphNode):
                 log_pdf = distr.log_pdf(state[self.name])
             else:
                 log_pdf = 0.0
+
+            if Options.debug:
+                print("[{}/P]   distr = {}".format(self.name, self.distribution.to_py(state)))
+                if self.evaluate_observation_pdf is not None:
+                    print("[{}/P]   distr.log_pdf({}) => {}".format(self.name, self.observation.to_py(state), log_pdf))
+                elif self.name in state:
+                    print("[{}/P]   distr.log_pdf({}) => {}".format(self.name, repr(state[self.name]), log_pdf))
+                else:
+                    print("[{}/P]   => {}".format(self.name, log_pdf))
 
             state['log_pdf'] = state.get('log_pdf', 0.0) + log_pdf
             return log_pdf
