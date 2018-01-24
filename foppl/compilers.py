@@ -421,7 +421,8 @@ class Compiler(Walker):
 
             node = DataNode(data=data, source=source)
             self._merge_graph(Graph(set(), data={node}))
-            return Graph(set(), data={node}), CodeDataSymbol(node)
+            result = Graph(set(), data={node}), CodeDataSymbol(node)
+            return result
         else:
             raise TypeError("'load' requires s single string-argument")
 

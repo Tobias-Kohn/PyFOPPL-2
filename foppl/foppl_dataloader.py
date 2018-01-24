@@ -15,6 +15,8 @@ def load_from_source(source: str):
     :return:        Either a Python `list` or `None`.
     """
     if os.path.exists(source):
+        if source.endswith(".idx1-ubyte") or source.endswith(".idx3-ubyte"):
+            return load_mnist_idx_file(source)
         with open(source) as source_file:
             result = []
             for line in source_file.readlines():
@@ -76,3 +78,37 @@ def parse_line(line):
         return result[0]
     else:
         return result
+
+
+def load_mnist_idx_file(name):
+    with open(name, "rb") as input_file:
+        magic = input_file.read(4)
+        no_of_items = 0
+        for c in input_file.read(4):
+            no_of_items *= 0x100
+            no_of_items += int(c)
+        result = []
+
+        if magic == b'\x00\x00\x08\x01':
+            for _ in range(no_of_items):
+                result.append(int(input_file.read(1)[0]))
+
+        elif magic == b'\x00\x00\x08\x03':
+            no_of_rows = 0
+            no_of_cols = 0
+            for c in input_file.read(4):
+                no_of_rows *= 0x100
+                no_of_rows += int(c)
+            for c in input_file.read(4):
+                no_of_cols *= 0x100
+                no_of_cols += int(c)
+            pixel_per_image = no_of_cols * no_of_rows
+
+            for i in range(no_of_items):
+                image = input_file.read(pixel_per_image)
+                result.append([int(c) for c in image])
+
+        else:
+            raise IOError("invalid MNIST index file: '{}'".format(name))
+
+    return result

@@ -231,15 +231,29 @@ class DataNode(GraphNode):
         self.data = data
         self.source = source
         self.ancestors = set()
-        self.code = _LAMBDA_PATTERN_.format(repr(self.data))
-        self.evaluate = eval(self.code)
+        self.code = None # _LAMBDA_PATTERN_.format(repr(self.data))
+        self.evaluate = None # eval(self.code)
         self.line_number = line_number
-        self.full_code = "state['{}'] = {}".format(self.name, repr(self.data))
+        if len(self.data) > 20:
+            self.data_repr = "[{}, {}, {}, {}, {}, ..., {}, {}] <{} items>".format(
+                self.data[0], self.data[1], self.data[2], self.data[3], self.data[4],
+                self.data[-2], self.data[-1], len(self.data)
+            )
+        else:
+            self.data_repr = repr(self.data)
+        self.full_code = "state['{}'] = {}".format(self.name, self.data_repr)
 
     def __repr__(self):
-        result = "{} = {}".format(self.name, repr(self.data))
+        result = "{} = {}".format(self.name, self.data_repr)
         if self.source is not None:
             result += " FROM <{}>".format(self.source)
+        return result
+
+    def update(self, state: dict):
+        result = self.data
+        state[self.name] = result
+        if Options.debug:
+            print("[{}]  => {}".format(self.name, self.data_repr))
         return result
 
 

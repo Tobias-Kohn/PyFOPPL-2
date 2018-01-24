@@ -24,8 +24,7 @@ pdf = foppl_model.model.gen_pdf(state)
 print("Result: {}\nPDF: {}".format(foppl_model.model.get_result(state), pdf))
 
 print("=" * 30)
-
-for key in sorted(state.keys()):
+#for key in sorted(state.keys()):
     print("{}  -> {}".format(key, state[key]))
 
 foppl_model.model.display_graph()
