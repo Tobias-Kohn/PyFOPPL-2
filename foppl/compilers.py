@@ -14,6 +14,7 @@ from . import py_parser
 from .foppl_ast import *
 from .code_objects import *
 from .graphs import *
+from . import foppl_dataloader
 
 
 class Scope(object):
@@ -410,6 +411,19 @@ class Compiler(Walker):
                 return graph, CodeFunctionCall('zip', [item for _, item in arguments])
         else:
             raise TypeError("'interleave' requires at least one argument")
+
+    def visit_call_load(self, node: AstFunctionCall):
+        if len(node.args) == 1 and isinstance(node.args[0], AstValue) and type(node.args[0].value is str):
+            source = foppl_dataloader.find_path(node.args[0].value)
+            data = foppl_dataloader.load_from_source(source) if source is not None else None
+            if data is None:
+                raise IOError("data-source could not be found: '{}'".format(source))
+
+            node = DataNode(data=data, source=source)
+            self._merge_graph(Graph(set(), data={node}))
+            return Graph(set(), data={node}), CodeDataSymbol(node)
+        else:
+            raise TypeError("'load' requires s single string-argument")
 
     def visit_call_map(self, node: AstFunctionCall):
         if len(node.args) < 2:

@@ -31,6 +31,13 @@ log_pdf = model.gen_pdf(state)
 print(log_pdf)
 ```
 
+You can get a visual representation of the graphical model if you have
+the Python packages `networkx` and `matplotlib` installed (preferably
+also `graphviz`).
+```python
+model.display_graph()
+```
+
 The file [example.py](example.py) shows how you might import a FOPPL mode, 
 print out the generated graphical model, or generate samples from it. 
 

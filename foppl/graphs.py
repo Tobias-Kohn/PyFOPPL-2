@@ -104,6 +104,10 @@ class GraphNode(object):
 
     @property
     def display_name(self):
+        if hasattr(self, 'original_name'):
+            name = self.original_name
+            if name is not None and len(name) > 0:
+                return name.replace('_', '')
         return self.name[-3:]
 
     def evaluate(self, state):
@@ -220,11 +224,12 @@ class DataNode(GraphNode):
     depends on anything else, but only provides a constant value.
     """
 
-    def __init__(self, *, name:str=None, data, line_number:int=-1):
+    def __init__(self, *, name:str=None, data, line_number:int=-1, source:str=None):
         if name is None:
             name = self.__class__.__gen_symbol__('data_')
         self.name = name
         self.data = data
+        self.source = source
         self.ancestors = set()
         self.code = _LAMBDA_PATTERN_.format(repr(self.data))
         self.evaluate = eval(self.code)
@@ -232,7 +237,10 @@ class DataNode(GraphNode):
         self.full_code = "state['{}'] = {}".format(self.name, repr(self.data))
 
     def __repr__(self):
-        return "{} = {}".format(self.name, repr(self.data))
+        result = "{} = {}".format(self.name, repr(self.data))
+        if self.source is not None:
+            result += " FROM <{}>".format(self.source)
+        return result
 
 
 class Parameter(GraphNode):
