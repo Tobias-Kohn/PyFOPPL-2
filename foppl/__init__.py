@@ -42,6 +42,8 @@ class Options(object):
 
     devectorize = False
 
+    log_model = None
+
 
 # Stubs to make the Python-IDE happy
 

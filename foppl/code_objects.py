@@ -113,7 +113,21 @@ class CodeDistribution(CodeObject):
                 return max([len(item) for item in arg.items])
             else:
                 return len(arg.items)
+
+        elif isinstance(arg, CodeDataSymbol) and len(arg) > 0:
+            if all([type(item) is list for item in arg.node.data]):
+                return max([len(item) for item in arg.node.data])
+            else:
+                return len(arg.node.data)
+
+        elif isinstance(arg.code_type, SequenceType):
+            if isinstance(arg.code_type.item_type, SequenceType):
+                return arg.code_type.item_type.size
+            else:
+                return arg.code_type.size
+
         else:
+
             return None
 
 

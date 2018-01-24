@@ -4,7 +4,7 @@ from foppl import Options, imports
 Options.debug = True
 
 # Import and compile the model:
-import gmm_model_a as foppl_model
+import gmm_model_b as foppl_model
 
 # Print out the entire model:
 print(foppl_model.model)

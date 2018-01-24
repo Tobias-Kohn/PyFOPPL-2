@@ -585,6 +585,7 @@ class Graph(object):
         :return:  A new instance of `Model` (`foppl_model`).
         """
         from .foppl_model import Model
+        import datetime
         compute_nodes = self.get_ordered_list_of_all_nodes()
         if result_expr is not None:
             if hasattr(result_expr, 'to_py'):
@@ -592,9 +593,23 @@ class Graph(object):
             result_function = eval(_LAMBDA_PATTERN_.format(result_expr))
         else:
             result_function = None
-        return Model(vertices=self.vertices, arcs=self.arcs, data=self.data,
-                     conditionals=self.conditions, compute_nodes=compute_nodes,
-                     result_function=result_function)
+        model = Model(vertices=self.vertices, arcs=self.arcs, data=self.data,
+                      conditionals=self.conditions, compute_nodes=compute_nodes,
+                      result_function=result_function)
+        if Options.log_model is not None and len(Options.log_model) > 0:
+            debug_flag = Options.debug
+            try:
+                Options.debug = True
+                with open(Options.log_model, 'w') as log_file:
+                    log_file.write("#\n# {}\n#\n".format(datetime.datetime.now()))
+                    log_file.write(repr(model))
+                    log_file.write("\n" + "=" * 50 + "\n")
+                    log_file.write(model.gen_prior_samples_code())
+                    log_file.write("\n" + "-" * 50 + "\n")
+                    log_file.write(model.gen_pdf_code())
+            finally:
+                Options.debug = debug_flag
+        return model
 
 
 Graph.EMPTY = Graph(vertices=set())
