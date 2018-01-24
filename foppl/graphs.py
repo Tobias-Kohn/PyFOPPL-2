@@ -220,8 +220,8 @@ class ConditionNode(GraphNode):
 
 class DataNode(GraphNode):
     """
-    Data nodes bear virtually no importance, but help keep large data sets out of the code. A data node never
-    depends on anything else, but only provides a constant value.
+    Data nodes do not carry out any computation, but provide the data. They are used to keep larger data set out
+    of the code, as large lists are replaced by symbols.
     """
 
     def __init__(self, *, name:str=None, data, line_number:int=-1, source:str=None):
@@ -231,8 +231,8 @@ class DataNode(GraphNode):
         self.data = data
         self.source = source
         self.ancestors = set()
-        self.code = None # _LAMBDA_PATTERN_.format(repr(self.data))
-        self.evaluate = None # eval(self.code)
+        self.code = name
+        self.evaluate = lambda state: self.data
         self.line_number = line_number
         if len(self.data) > 20:
             self.data_repr = "[{}, {}, {}, {}, {}, ..., {}, {}] <{} items>".format(
@@ -255,29 +255,6 @@ class DataNode(GraphNode):
         if Options.debug:
             print("[{}]  => {}".format(self.name, self.data_repr))
         return result
-
-
-class Parameter(GraphNode):
-    """
-    Currently, parameter are not fully supported, yet.
-
-    Parameter nodes are very similar to data nodes in that they just provide a simple constant value, and do not
-    depend on any other nodes. The difference is, however, that parameter nodes should allow to change their values
-    upon intervention from the outside.
-    """
-
-    def __init__(self, *, name:str=None, value, line_number:int=-1):
-        if name is None:
-            name = self.__class__.__gen_symbol__('param_')
-        self.name = name
-        self.ancestors = set()
-        self.value = value
-        self.code = _LAMBDA_PATTERN_.format(value)
-        self.evaluate = eval(self.code)
-        self.line_number = line_number
-
-    def __repr__(self):
-        return "{}: {}".format(self.name, self.value)
 
 
 class Vertex(GraphNode):
