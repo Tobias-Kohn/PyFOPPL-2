@@ -35,4 +35,4 @@ c = make_output_vector()
 
 result = []
 for i in range(output_dim):
-    result.append( append_flip(i, sigmoid(matrix.add(matrix.mmul(V, h), c))) )
+    result.append( flip(i, sigmoid(matrix.add(matrix.mmul(V, h), c))) )
