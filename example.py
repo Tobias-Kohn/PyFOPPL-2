@@ -24,6 +24,7 @@ pdf = foppl_model.model.gen_pdf(state)
 print("Result: {}\nPDF: {}".format(foppl_model.model.get_result(state), pdf))
 
 print("=" * 30)
+state = foppl_model.model.transform_state(state, samples_only=True)
 for key in sorted(state.keys()):
     print("{}  -> {}".format(key, state[key]))
 
