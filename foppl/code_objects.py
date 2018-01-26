@@ -4,10 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 25. Jan 2018, Tobias Kohn
+# 26. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .code_types import *
+from .foppl_distributions import distributions_with_transform_flag
 
 ##############################################################################
 
@@ -93,12 +94,19 @@ class CodeDistribution(CodeObject):
         self.name = name
         self.args = args
         self.code_type = DistributionType(name, [a.code_type for a in args])
+        self.has_transform_flag = name in distributions_with_transform_flag
 
     def __repr__(self):
-        return "dist.{}({})".format(self.name, ', '.join([repr(a) for a in self.args]))
+        if self.has_transform_flag:
+            return "dist.{}({}, transformed=transform_flag)".format(self.name, ', '.join([repr(a) for a in self.args]))
+        else:
+            return "dist.{}({})".format(self.name, ', '.join([repr(a) for a in self.args]))
 
     def to_py(self, state:dict=None):
-        return "dist.{}({})".format(self.name, ', '.join([a.to_py(state) for a in self.args]))
+        if self.has_transform_flag:
+            return "dist.{}({}, transformed=transform_flag)".format(self.name, ', '.join([a.to_py(state) for a in self.args]))
+        else:
+            return "dist.{}({})".format(self.name, ', '.join([a.to_py(state) for a in self.args]))
 
     def get_sample_size(self):
         result = self.code_type.result

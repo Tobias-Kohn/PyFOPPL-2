@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 25. Jan 2018, Tobias Kohn
+# 26. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -113,6 +113,12 @@ class GraphNode(object):
     def evaluate(self, state):
         raise NotImplemented()
 
+    def get_value(self, state):
+        if self.name in state:
+            return state[self.name]
+        else:
+            return None
+
     def update(self, state: dict):
         result = self.evaluate(state)
         state[self.name] = result
@@ -129,6 +135,7 @@ class GraphNode(object):
 
 # This is used to generate the various `evaluate`-methods later on.
 _LAMBDA_PATTERN_ = "lambda state: {}"
+_LAMBDA_PATTERN_TF_ = "lambda state, transform_flag: {}"
 
 
 class ConditionNode(GraphNode):
@@ -341,13 +348,12 @@ class Vertex(GraphNode):
         self.distribution_name = distribution.name
         self.distribution_type = distributions.get(distribution.name, 'unknown')
         self.support_size = distribution.get_support_size()
-        code_type = self.distribution.code_type
         self.sample_size = distribution.get_sample_size()
-        self.code = _LAMBDA_PATTERN_.format(self.distribution.to_py())
+        self.code = _LAMBDA_PATTERN_TF_.format(self.distribution.to_py())
         self.evaluate = eval(self.code)
         if self.observation is not None:
             obs = self.observation.to_py()
-            self.evaluate_observation = eval(_LAMBDA_PATTERN_.format(obs))
+            self.evaluate_observation = eval(_LAMBDA_PATTERN_TF_.format(obs))
             self.evaluate_observation_pdf = eval("lambda state, dist: dist.log_pdf({})".format(obs))
             self.full_code = "state['{}'] = {}".format(self.name, obs)
             self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf({})".format(self.distribution.to_py(), obs))
@@ -358,6 +364,7 @@ class Vertex(GraphNode):
             self.full_code = "state['{}'] = {}.sample()".format(self.name, code)
             self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf(state['{}'])".format(code, self.name))
         self.line_number = line_number
+        self.transform_flag = False
 
     def __repr__(self):
         result = "{}:\n" \
@@ -417,15 +424,31 @@ class Vertex(GraphNode):
     def is_sampled(self):
         return self.observation is None
 
-    def update(self, state: dict):
+    def get_parameter_values(self, state):
+        args = [eval(_LAMBDA_PATTERN_.format(arg.to_py())) for arg in self.distribution.args]
+        args = [arg(state) for arg in args]
+        return args
+
+    def get_value(self, state):
+        t_name = self.name + ".transformed"
+        if t_name in state:
+            return state[t_name]
+        elif self.name in state:
+            return state[self.name]
+        else:
+            return None
+
+    def update(self, state: dict, transform_flag:bool=None):
+        if transform_flag is None:
+            transform_flag = self.transform_flag
         try:
-            if self.evaluate_observation:
-                result = self.evaluate_observation(state)
+            if self.evaluate_observation is not None:
+                result = self.evaluate_observation(state, transform_flag)
                 if Options.debug:
                     #print("[{}] distr = {}".format(self.name, self.distribution.to_py(state)))
                     print("[{}] observe {} => {}".format(self.name, self.observation.to_py(state), result))
             else:
-                result = self.evaluate(state).sample()
+                result = self.evaluate(state, transform_flag).sample()
                 if Options.debug:
                     print("[{}] {}.sample() => {}".format(self.name, self.distribution.to_py(state), result))
             state[self.name] = result
@@ -434,9 +457,16 @@ class Vertex(GraphNode):
             print("ERROR in {}:\n ".format(self.name), self.full_code)
             raise
 
-    def update_pdf(self, state: dict):
+    def update_pdf(self, state: dict, transform_flag:bool=None):
+        t_name = self.name + ".transformed"
+        if t_name in state:
+            transform_flag = True
+        if transform_flag is None:
+            transform_flag = self.transform_flag
         try:
             if Options.debug:
+                if transform_flag:
+                    print("[{}/P]   transformed = True".format(self.name))
                 for cond, truth_value in self.conditions:
                     print("[{}/P]   if {} == {}".format(self.name, repr(state[cond.name]), truth_value))
                     if state[cond.name] != truth_value:
@@ -447,9 +477,11 @@ class Vertex(GraphNode):
                     if state[cond.name] != truth_value:
                         return 0.0
 
-            distr = self.evaluate(state)
+            distr = self.evaluate(state, transform_flag)
             if self.evaluate_observation_pdf is not None:
                 log_pdf = self.evaluate_observation_pdf(state, distr)
+            elif t_name in state:
+                log_pdf = distr.log_pdf(state[t_name])
             elif self.name in state:
                 log_pdf = distr.log_pdf(state[self.name])
             else:

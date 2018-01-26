@@ -11,9 +11,9 @@ print(foppl_model.model)
 
 print("=" * 30)
 print("CODE")
-print(foppl_model.model.gen_prior_samples_code())
+print(foppl_model.model.gen_prior_samples_code)
 print("-" * 30)
-print(foppl_model.model.gen_pdf_code())
+print(foppl_model.model.gen_pdf_code)
 print("-" * 30)
 
 # A sample run with the model:
