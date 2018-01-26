@@ -68,7 +68,7 @@ distribution_map = {
 distribution_params = {
     "Bernoulli": ["ps"],
     "Beta": ["alpha", "beta"],
-    "Binomial": ["ps"],
+    "Binomial": ["total_count","probs"],
     "Categorical": ["ps"],
     "Cauchy": ["mu", "gamma"],
     "Dirichlet": ["alpha"],
