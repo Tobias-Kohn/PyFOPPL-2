@@ -314,7 +314,7 @@ class Vertex(GraphNode):
     """
 
     def __init__(self, *, name:str=None, ancestors:set=None, data:set=None, distribution=None, observation=None,
-                 ancestor_graph=None, conditions:list=None, line_number:int=-1):
+                 ancestor_graph=None, conditions:list=None, line_number:int=-1, transform_flag:bool=False):
         from . import code_types
         if name is None:
             name = self.__class__.__gen_symbol__('y' if observation is not None else 'x')
@@ -364,7 +364,7 @@ class Vertex(GraphNode):
             self.full_code = "state['{}'] = {}.sample()".format(self.name, code)
             self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf(state['{}'])".format(code, self.name))
         self.line_number = line_number
-        self.transform_flag = False
+        self.transform_flag = transform_flag
 
     def __repr__(self):
         result = "{}:\n" \
@@ -438,9 +438,8 @@ class Vertex(GraphNode):
         else:
             return None
 
-    def update(self, state: dict, transform_flag:bool=None):
-        if transform_flag is None:
-            transform_flag = self.transform_flag
+    def update(self, state: dict):
+        transform_flag = self.transform_flag
         try:
             if self.evaluate_observation is not None:
                 result = self.evaluate_observation(state, transform_flag)
@@ -457,11 +456,11 @@ class Vertex(GraphNode):
             print("ERROR in {}:\n ".format(self.name), self.full_code)
             raise
 
-    def update_pdf(self, state: dict, transform_flag:bool=None):
+    def update_pdf(self, state: dict):
         t_name = self.name + ".transformed"
         if t_name in state:
             transform_flag = True
-        if transform_flag is None:
+        else:
             transform_flag = self.transform_flag
         try:
             if Options.debug:

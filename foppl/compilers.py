@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 25. Jan 2018, Tobias Kohn
+# 26. Jan 2018, Tobias Kohn
 #
 import math
 from . import foppl_objects
@@ -15,6 +15,7 @@ from .foppl_ast import *
 from .code_objects import *
 from .graphs import *
 from . import foppl_dataloader
+from .foppl_transformations import Transformations
 
 
 class Scope(object):
@@ -833,8 +834,14 @@ class Compiler(Walker):
         obs_graph, obs_value = node.value.walk(self)
         if not isinstance(dist, CodeDistribution):
             raise TypeError("'observe' requires a distribution as first parameter, not '{}'".format(dist))
+        transform = getattr(Transformations, dist.name, None)
+        if transform is not None:
+            forward, _, new_dist = transform()
+            obs_value = CodeFunctionCall(forward, [obs_value])
+            dist = CodeDistribution(new_dist, dist.args)
         vertex = Vertex(ancestor_graph=merge(graph, obs_graph), distribution=dist, observation=obs_value,
-                        conditions=self.current_conditions(), line_number=node.line_number)
+                        conditions=self.current_conditions(), line_number=node.line_number,
+                        transform_flag=transform is not None)
         graph = Graph({vertex}).merge(graph)
         self._merge_graph(graph)
         return Graph.EMPTY, CodeObserve(vertex)
@@ -843,11 +850,20 @@ class Compiler(Walker):
         graph, dist = node.distribution.walk(self)
         if not isinstance(dist, CodeDistribution):
             raise TypeError("'sample' requires a distribution as first parameter, not '{}'".format(dist))
+        transform = getattr(Transformations, dist.name, None)
+        if transform is not None:
+            _, invert, new_dist = transform()
+            dist = CodeDistribution(new_dist, dist.args)
+        else:
+            invert = None
         vertex = Vertex(ancestor_graph=graph, distribution=dist, conditions=self.current_conditions(),
-                        line_number=node.line_number)
+                        line_number=node.line_number, transform_flag=transform is not None)
         graph = Graph({vertex}).merge(graph)
         self._merge_graph(graph)
-        return graph, CodeSample(vertex)
+        code = CodeSample(vertex)
+        if invert is not None:
+            code = CodeFunctionCall(invert, [code])
+        return graph, code
 
     def visit_sqrt(self, node: AstSqrt):
         graph, code = node.item.walk(self)
