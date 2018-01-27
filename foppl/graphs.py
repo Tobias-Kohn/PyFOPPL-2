@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 26. Jan 2018, Tobias Kohn
+# 27. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -106,6 +106,8 @@ class GraphNode(object):
     def display_name(self):
         if hasattr(self, 'original_name'):
             name = self.original_name
+            if name is not None and '.' in name:
+                name = name.split('.')[-1]
             if name is not None and len(name) > 0:
                 return name.replace('_', '')
         return self.name[-3:]
@@ -439,15 +441,14 @@ class Vertex(GraphNode):
             return None
 
     def update(self, state: dict):
-        transform_flag = self.transform_flag
         try:
             if self.evaluate_observation is not None:
-                result = self.evaluate_observation(state, transform_flag)
+                result = self.evaluate_observation(state, self.transform_flag)
                 if Options.debug:
                     #print("[{}] distr = {}".format(self.name, self.distribution.to_py(state)))
                     print("[{}] observe {} => {}".format(self.name, self.observation.to_py(state), result))
             else:
-                result = self.evaluate(state, transform_flag).sample()
+                result = self.evaluate(state, self.transform_flag).sample()
                 if Options.debug:
                     print("[{}] {}.sample() => {}".format(self.name, self.distribution.to_py(state), result))
             state[self.name] = result
@@ -457,14 +458,9 @@ class Vertex(GraphNode):
             raise
 
     def update_pdf(self, state: dict):
-        t_name = self.name + ".transformed"
-        if t_name in state:
-            transform_flag = True
-        else:
-            transform_flag = self.transform_flag
         try:
             if Options.debug:
-                if transform_flag:
+                if self.transform_flag:
                     print("[{}/P]   transformed = True".format(self.name))
                 for cond, truth_value in self.conditions:
                     print("[{}/P]   if {} == {}".format(self.name, repr(state[cond.name]), truth_value))
@@ -476,11 +472,9 @@ class Vertex(GraphNode):
                     if state[cond.name] != truth_value:
                         return 0.0
 
-            distr = self.evaluate(state, transform_flag)
+            distr = self.evaluate(state, self.transform_flag)
             if self.evaluate_observation_pdf is not None:
                 log_pdf = self.evaluate_observation_pdf(state, distr)
-            elif t_name in state:
-                log_pdf = distr.log_pdf(state[t_name])
             elif self.name in state:
                 log_pdf = distr.log_pdf(state[self.name])
             else:

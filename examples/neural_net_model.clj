@@ -32,7 +32,7 @@
   (matrix/div 1.0 (matrix/add 1.0 (matrix/exp (matrix/sub 0.0 v)))))
 
 (defn append-flip [i v p]
-  (conj v (sample (binomial (nth p i)))))
+  (conj v (sample (binomial 1 (nth p i)))))
 
 (let [z (make-latent-vector)
 
