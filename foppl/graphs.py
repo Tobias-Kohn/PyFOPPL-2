@@ -431,15 +431,6 @@ class Vertex(GraphNode):
         args = [arg(state) for arg in args]
         return args
 
-    def get_value(self, state):
-        t_name = self.name + ".transformed"
-        if t_name in state:
-            return state[t_name]
-        elif self.name in state:
-            return state[self.name]
-        else:
-            return None
-
     def update(self, state: dict):
         try:
             if self.evaluate_observation is not None:
