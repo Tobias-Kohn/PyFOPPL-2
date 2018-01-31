@@ -364,7 +364,7 @@ class Vertex(GraphNode):
             self.evaluate_observation = None
             self.evaluate_observation_pdf = None
             code = self.distribution.to_py()
-            self.full_code = "state['{}'] = {}.sample()".format(self.name, code)
+            self.full_code = "state['{}'] = {}.sample().float()".format(self.name, code)
             self.full_code_pdf = self._get_cond_code("log_prob += {}.log_prob(state['{}'])".format(code, self.name))
         self.line_number = line_number
         self.transform_flag = transform_flag
@@ -442,7 +442,7 @@ class Vertex(GraphNode):
             else:
                 result = self.evaluate(state, self.transform_flag).sample()
                 if Options.debug:
-                    print("[{}] {}.sample() => {}".format(self.name, self.distribution.to_py(state), result))
+                    print("[{}] {}.sample().float() => {}".format(self.name, self.distribution.to_py(state), result))
             state[self.name] = result
             return result
         except:

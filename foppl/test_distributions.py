@@ -12,7 +12,7 @@ import random as _random
 
 class dist(object):
     """
-    This class is a namespace with "stand-in" distributions for testing purposes. They are explicitly not
+    This class is aRefactored distributions. namespace with "stand-in" distributions for testing purposes. They are explicitly not
     meant to be used for actual sampling and evaluation. However, using these test-distributions allows us
     to test the frontend/compiler without the sophisticated backend doing actual inference.
     """
