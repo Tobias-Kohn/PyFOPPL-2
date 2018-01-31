@@ -4,10 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 31. Jan 2018, Tobias Kohn
+# 30. Jan 2018, Tobias Kohn
 #
 from .graphs import *
 from .code_types import *
+from .foppl_distributions import distributions_with_transform_flag
 
 ##############################################################################
 
@@ -65,7 +66,7 @@ class CodeCompare(CodeObject):
 
 class CodeDataSymbol(CodeObject):
 
-    def __init__(self, node):
+    def __init__(self, node: DataNode):
         self.node = node
         self.name = node.name
         self.code_type = get_code_type_for_value(node.data)
@@ -90,50 +91,22 @@ class CodeDataSymbol(CodeObject):
 class CodeDistribution(CodeObject):
 
     def __init__(self, name, args):
-        from . import distributions
         self.name = name
         self.args = args
         self.code_type = DistributionType(name, [a.code_type for a in args])
-        dist = distributions.get_distribution_for_name(name)
-        if dist is not None:
-            self.dist = dist
-            self.has_transform_flag = dist.has_transform_flag
-        else:
-            self.dist = None
-            self.has_transform_flag = False
+        self.has_transform_flag = name in distributions_with_transform_flag
 
     def __repr__(self):
-        args = [repr(a) for a in self.args]
-        if Config.dist_param_wrapper is not None and Config.dist_param_wrapper != '':
-            args = ['{}({})'.format(Config.dist_param_wrapper, a) for a in args]
-            if self.dist is not None:
-                params = self.dist.params
-                if len(params) == len(args):
-                    args = ["{}={}".format(p, a) for p, a in zip(params, args)]
         if self.has_transform_flag:
-            return "dist.{}({}, transformed=transform_flag)".format(self.name, ', '.join(args))
+            return "dist.{}({}, transformed=transform_flag)".format(self.name, ', '.join([repr(a) for a in self.args]))
         else:
-            return "dist.{}({})".format(self.name, ', '.join(args))
+            return "dist.{}({})".format(self.name, ', '.join([repr(a) for a in self.args]))
 
     def to_py(self, state:dict=None):
-        args = [a.to_py(state) for a in self.args]
-        if Config.dist_param_wrapper is not None and Config.dist_param_wrapper != '':
-            wrapper = '{}({{}})'.format(Config.dist_param_wrapper)
-        else:
-            wrapper = '{}'
-
-        if self.dist is not None:
-            params = self.dist.params
-            if len(params) == len(args):
-                args = [("{}=" + wrapper if p != 'total_count' else "{}={}").format(p, a) for p, a in zip(params, args)]
-            else:
-                args = [wrapper.format(a) for a in args]
-        else:
-            args = [wrapper.format(a) for a in args]
         if self.has_transform_flag:
-            return "dist.{}({}, transformed=transform_flag)".format(self.name, ', '.join(args))
+            return "dist.{}({}, transformed=transform_flag)".format(self.name, ', '.join([a.to_py(state) for a in self.args]))
         else:
-            return "dist.{}({})".format(self.name, ', '.join(args))
+            return "dist.{}({})".format(self.name, ', '.join([a.to_py(state) for a in self.args]))
 
     def get_sample_size(self):
         result = self.code_type.result
@@ -320,14 +293,14 @@ class CodeIf(CodeObject):
     def to_py(self, state:dict=None):
         else_expr = self.else_expr.to_py(state) if self.else_expr else "None"
         result = "({} if {}{} else {})".format(
-            self.if_expr.to_py(state), self.cond.to_py(state), Config.conditional_suffix, else_expr
+            self.if_expr.to_py(state), self.cond.to_py(state), Options.conditional_suffix, else_expr
         )
         return result
 
 
 class CodeObserve(CodeObject):
 
-    def __init__(self, vertex):
+    def __init__(self, vertex: Vertex):
         self.vertex = vertex
         self.distribution = vertex.distribution
         self.value = vertex.observation
@@ -346,7 +319,7 @@ class CodeObserve(CodeObject):
 
 class CodeSample(CodeObject):
 
-    def __init__(self, vertex):
+    def __init__(self, vertex: Vertex):
         self.vertex = vertex
         self.distribution = vertex.distribution
         self.code_type = self.distribution.code_type.result_type()
