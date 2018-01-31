@@ -104,8 +104,8 @@ class CodeDistribution(CodeObject):
 
     def __repr__(self):
         args = [repr(a) for a in self.args]
-        if Options.dist_param_wrapper is not None and Options.dist_param_wrapper != '':
-            args = ['{}({})'.format(Options.dist_param_wrapper, a) for a in args]
+        if Config.dist_param_wrapper is not None and Config.dist_param_wrapper != '':
+            args = ['{}({})'.format(Config.dist_param_wrapper, a) for a in args]
             if self.dist is not None:
                 params = self.dist.params
                 if len(params) == len(args):
@@ -117,8 +117,8 @@ class CodeDistribution(CodeObject):
 
     def to_py(self, state:dict=None):
         args = [a.to_py(state) for a in self.args]
-        if Options.dist_param_wrapper is not None and Options.dist_param_wrapper != '':
-            wrapper = '{}({{}})'.format(Options.dist_param_wrapper)
+        if Config.dist_param_wrapper is not None and Config.dist_param_wrapper != '':
+            wrapper = '{}({{}})'.format(Config.dist_param_wrapper)
         else:
             wrapper = '{}'
 
@@ -320,7 +320,7 @@ class CodeIf(CodeObject):
     def to_py(self, state:dict=None):
         else_expr = self.else_expr.to_py(state) if self.else_expr else "None"
         result = "({} if {}{} else {})".format(
-            self.if_expr.to_py(state), self.cond.to_py(state), Options.conditional_suffix, else_expr
+            self.if_expr.to_py(state), self.cond.to_py(state), Config.conditional_suffix, else_expr
         )
         return result
 

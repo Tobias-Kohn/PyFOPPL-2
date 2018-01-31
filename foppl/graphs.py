@@ -65,7 +65,7 @@ log_prob += dist.Normal((state['x1'] + state['x2'])/2, 1).log_prob(3)
 ```
 Both computations are facilitated by the methods `update` and `update_pdf` of the node.
 """
-from . import Options, runtime
+from . import Options, Config, runtime
 from . import distributions
 from .basic_imports import *
 
@@ -168,7 +168,7 @@ class ConditionNode(GraphNode):
         self.op = op
         self.condition = condition
         self.function = function
-        code = (condition.to_py() + Options.conditional_suffix if condition else "None")
+        code = (condition.to_py() + Config.conditional_suffix if condition else "None")
         self.code = _LAMBDA_PATTERN_.format(code)
         self.full_code = "state['{}'] = {}".format(self.name, code)
         self.function_code = _LAMBDA_PATTERN_.format(function.to_py() if function else "None")
@@ -357,15 +357,17 @@ class Vertex(GraphNode):
         if self.observation is not None:
             obs = self.observation.to_py()
             self.evaluate_observation = eval(_LAMBDA_PATTERN_TF_.format(obs))
-            self.evaluate_observation_pdf = eval("lambda state, dist: dist.log_prob({})".format(obs))
+            self.evaluate_observation_pdf = eval("lambda state, dist: dist" + Config.log_pdf_method.format(obs))
             self.full_code = "state['{}'] = {}".format(self.name, obs)
-            self.full_code_pdf = self._get_cond_code("log_prob += {}.log_prob({})".format(self.distribution.to_py(), obs))
+            self.full_code_pdf = self._get_cond_code(("log_prob += {}" + Config.log_pdf_method)
+                                                     .format(self.distribution.to_py(), obs))
         else:
             self.evaluate_observation = None
             self.evaluate_observation_pdf = None
             code = self.distribution.to_py()
-            self.full_code = "state['{}'] = {}.sample().float()".format(self.name, code)
-            self.full_code_pdf = self._get_cond_code("log_prob += {}.log_prob(state['{}'])".format(code, self.name))
+            self.full_code = "state['{}'] = {}{}".format(self.name, code, Config.sample_method)
+            self.full_code_pdf = self._get_cond_code(
+                ("log_prob += {}" + Config.log_pdf_method.format("state['{}']")).format(code, self.name))
         self.line_number = line_number
         self.transform_flag = transform_flag
 
@@ -442,7 +444,8 @@ class Vertex(GraphNode):
             else:
                 result = self.evaluate(state, self.transform_flag).sample()
                 if Options.debug:
-                    print("[{}] {}.sample().float() => {}".format(self.name, self.distribution.to_py(state), result))
+                    print("[{}] {}{} => {}".format(self.name, self.distribution.to_py(state),
+                                                   Config.sample_method, result))
             state[self.name] = result
             return result
         except:
@@ -475,9 +478,9 @@ class Vertex(GraphNode):
             if Options.debug:
                 print("[{}/P]   distr = {}".format(self.name, self.distribution.to_py(state)))
                 if self.evaluate_observation_pdf is not None:
-                    print("[{}/P]   distr.log_prob({}) => {}".format(self.name, self.observation.to_py(state), log_prob))
+                    print(("[{}/P]   distr" + Config.log_pdf_method + " => {}").format(self.name, self.observation.to_py(state), log_prob))
                 elif self.name in state:
-                    print("[{}/P]   distr.log_prob({}) => {}".format(self.name, repr(state[self.name]), log_prob))
+                    print(("[{}/P]   distr" + Config.log_pdf_method + " => {}").format(self.name, repr(state[self.name]), log_prob))
                 else:
                     print("[{}/P]   => {}".format(self.name, log_prob))
 

@@ -43,8 +43,6 @@ class Options(object):
 
     uniform_conditionals = True
 
-    conditional_suffix = '.data[0]'
-
     debug = False
 
     de_vectorize = False
@@ -54,7 +52,16 @@ class Options(object):
     # Some models with loops (e.g. neural_net_model) do not compile with this flag set on
     require_unique_names = False
 
+
+class Config(object):
+
+    conditional_suffix = '.data[0]'
+
     dist_param_wrapper = None
+
+    sample_method = '.sample()'
+
+    log_pdf_method = '.log_prob({})'
 
 
 # Stubs to make the Python-IDE happy
