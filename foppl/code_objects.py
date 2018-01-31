@@ -118,11 +118,18 @@ class CodeDistribution(CodeObject):
     def to_py(self, state:dict=None):
         args = [a.to_py(state) for a in self.args]
         if Options.dist_param_wrapper is not None and Options.dist_param_wrapper != '':
-            args = ['{}({})'.format(Options.dist_param_wrapper, a) for a in args]
-            if self.dist is not None:
-                params = self.dist.params
-                if len(params) == len(args):
-                    args = ["{}={}".format(p, a) for p, a in zip(params, args)]
+            wrapper = '{}({{}})'.format(Options.dist_param_wrapper)
+        else:
+            wrapper = '{}'
+
+        if self.dist is not None:
+            params = self.dist.params
+            if len(params) == len(args):
+                args = [("{}=" + wrapper if p != 'total_count' else "{}={}").format(p, a) for p, a in zip(params, args)]
+            else:
+                args = [wrapper.format(a) for a in args]
+        else:
+            args = [wrapper.format(a) for a in args]
         if self.has_transform_flag:
             return "dist.{}({}, transformed=transform_flag)".format(self.name, ', '.join(args))
         else:

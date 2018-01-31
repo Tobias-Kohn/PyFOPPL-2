@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 17. Jan 2018, Tobias Kohn
-# 29. Jan 2018, Tobias Kohn
+# 31. Jan 2018, Tobias Kohn
 #
 from .code_objects import *
 from .code_types import *

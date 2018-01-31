@@ -296,7 +296,7 @@ class Vertex(GraphNode):
     `distribution_name`:
       The name of the distribution, such as `Normal` or `Gamma`.
     `distribution_type`:
-      Either `continuous` or `discrete`. You will usually query this field using one of the properties
+      Either `"continuous"` or `"discrete"`. You will usually query this field using one of the properties
       `is_continuous` or `is_discrete`.
     `observation`:
       The observation in an AST/IR-structure, which is usually not used directly, but rather for internal purposes.
