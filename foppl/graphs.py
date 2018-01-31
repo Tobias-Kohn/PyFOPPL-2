@@ -58,10 +58,10 @@ Using the `state`-dictionary allows us to carry the state across different nodes
 In addition, the model can also compute the log-pdf by a rewrite as follows (based upon a prior sampling to compute
 initial values for the variables in the `state`-dictionary):
 ```
-log_pdf = 0.0
-log_pdf += dist.Normal(0, 1).log_pdf(state['x1'])
-log_pdf += dist.Normal(state['x1'], 4).log_pdf(state['x2'])
-log_pdf += dist.Normal((state['x1'] + state['x2'])/2, 1).log_pdf(3)
+log_prob = 0.0
+log_prob += dist.Normal(0, 1).log_prob(state['x1'])
+log_prob += dist.Normal(state['x1'], 4).log_prob(state['x2'])
+log_prob += dist.Normal((state['x1'] + state['x2'])/2, 1).log_prob(3)
 ```
 Both computations are facilitated by the methods `update` and `update_pdf` of the node.
 """
@@ -357,15 +357,15 @@ class Vertex(GraphNode):
         if self.observation is not None:
             obs = self.observation.to_py()
             self.evaluate_observation = eval(_LAMBDA_PATTERN_TF_.format(obs))
-            self.evaluate_observation_pdf = eval("lambda state, dist: dist.log_pdf({})".format(obs))
+            self.evaluate_observation_pdf = eval("lambda state, dist: dist.log_prob({})".format(obs))
             self.full_code = "state['{}'] = {}".format(self.name, obs)
-            self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf({})".format(self.distribution.to_py(), obs))
+            self.full_code_pdf = self._get_cond_code("log_prob += {}.log_prob({})".format(self.distribution.to_py(), obs))
         else:
             self.evaluate_observation = None
             self.evaluate_observation_pdf = None
             code = self.distribution.to_py()
             self.full_code = "state['{}'] = {}.sample()".format(self.name, code)
-            self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf(state['{}'])".format(code, self.name))
+            self.full_code_pdf = self._get_cond_code("log_prob += {}.log_prob(state['{}'])".format(code, self.name))
         self.line_number = line_number
         self.transform_flag = transform_flag
 
@@ -457,7 +457,7 @@ class Vertex(GraphNode):
                 for cond, truth_value in self.conditions:
                     print("[{}/P]   if {} == {}".format(self.name, repr(state[cond.name]), truth_value))
                     if state[cond.name] != truth_value:
-                        print("[{}/P]     log_pdf += 0.0".format(self.name))
+                        print("[{}/P]     log_prob += 0.0".format(self.name))
                         return 0.0
             else:
                 for cond, truth_value in self.conditions:
@@ -466,23 +466,23 @@ class Vertex(GraphNode):
 
             distr = self.evaluate(state, self.transform_flag)
             if self.evaluate_observation_pdf is not None:
-                log_pdf = self.evaluate_observation_pdf(state, distr)
+                log_prob = self.evaluate_observation_pdf(state, distr)
             elif self.name in state:
-                log_pdf = distr.log_pdf(state[self.name])
+                log_prob = distr.log_prob(state[self.name])
             else:
-                log_pdf = 0.0
+                log_prob = 0.0
 
             if Options.debug:
                 print("[{}/P]   distr = {}".format(self.name, self.distribution.to_py(state)))
                 if self.evaluate_observation_pdf is not None:
-                    print("[{}/P]   distr.log_pdf({}) => {}".format(self.name, self.observation.to_py(state), log_pdf))
+                    print("[{}/P]   distr.log_prob({}) => {}".format(self.name, self.observation.to_py(state), log_prob))
                 elif self.name in state:
-                    print("[{}/P]   distr.log_pdf({}) => {}".format(self.name, repr(state[self.name]), log_pdf))
+                    print("[{}/P]   distr.log_prob({}) => {}".format(self.name, repr(state[self.name]), log_prob))
                 else:
-                    print("[{}/P]   => {}".format(self.name, log_pdf))
+                    print("[{}/P]   => {}".format(self.name, log_prob))
 
-            state['log_pdf'] = state.get('log_pdf', 0.0) + log_pdf
-            return log_pdf
+            state['log_prob'] = state.get('log_prob', 0.0) + log_prob
+            return log_prob
         except:
             print("ERROR in {}:\n ".format(self.name), self.full_code_pdf)
             raise

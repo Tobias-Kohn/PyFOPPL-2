@@ -211,8 +211,8 @@ class Model(object):
                     print("{}: {}".format(n, dp(state)))
             except:
                 pass
-        if 'log_pdf' in state:
-            return state['log_pdf']
+        if 'log_prob' in state:
+            return state['log_prob']
         else:
             return 0.0
 
