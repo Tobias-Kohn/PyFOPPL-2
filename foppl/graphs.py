@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 29. Jan 2018, Tobias Kohn
+# 31. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -65,7 +65,7 @@ log_pdf += dist.Normal((state['x1'] + state['x2'])/2, 1).log_pdf(3)
 ```
 Both computations are facilitated by the methods `update` and `update_pdf` of the node.
 """
-from . import Options, runtime
+from . import Options, Config, runtime
 from .foppl_distributions import distributions
 from .basic_imports import *
 
@@ -168,7 +168,7 @@ class ConditionNode(GraphNode):
         self.op = op
         self.condition = condition
         self.function = function
-        code = (condition.to_py() + Options.conditional_suffix if condition else "None")
+        code = (condition.to_py() + Config.conditional_suffix if condition else "None")
         self.code = _LAMBDA_PATTERN_.format(code)
         self.full_code = "state['{}'] = {}".format(self.name, code)
         self.function_code = _LAMBDA_PATTERN_.format(function.to_py() if function else "None")
