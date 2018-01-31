@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 29. Jan 2018, Tobias Kohn
+# 31. Jan 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -66,7 +66,7 @@ log_pdf += dist.Normal((state['x1'] + state['x2'])/2, 1).log_pdf(3)
 Both computations are facilitated by the methods `update` and `update_pdf` of the node.
 """
 from . import Options, runtime
-from .foppl_distributions import distributions
+from . import distributions
 from .basic_imports import *
 
 ####################################################################################################
@@ -348,7 +348,8 @@ class Vertex(GraphNode):
         self.conditions = conditions
         self.dependent_conditions = set()
         self.distribution_name = distribution.name
-        self.distribution_type = distributions.get(distribution.name, 'unknown')
+        dist = distributions.get_distribution_for_name(distribution.name)
+        self.distribution_type = str(dist.distribution_type) if dist is not None else "unknown"
         self.support_size = distribution.get_support_size()
         self.sample_size = distribution.get_sample_size()
         self.code = _LAMBDA_PATTERN_TF_.format(self.distribution.to_py())
@@ -412,11 +413,11 @@ class Vertex(GraphNode):
 
     @property
     def is_continuous(self):
-        return self.distribution_type == 'continuous'
+        return self.distribution_type == str(distributions.DistributionType.CONTINUOUS)
 
     @property
     def is_discrete(self):
-        return self.distribution_type == 'discrete'
+        return self.distribution_type == str(distributions.DistributionType.DISCRETE)
 
     @property
     def is_observed(self):

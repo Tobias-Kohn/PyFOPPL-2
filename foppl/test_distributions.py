@@ -19,7 +19,7 @@ class dist(object):
 
     class Dummy(object):
 
-        def __init__(self, *args):
+        def __init__(self, *args, **kwargs):
             pass
 
         def log_pdf(self, value):
@@ -30,6 +30,7 @@ class dist(object):
 
     Binomial = Dummy
     Dirichlet = Dummy
+    LogGamma = Dummy
     MultivariateNormal = Dummy
     Poisson = Dummy
 

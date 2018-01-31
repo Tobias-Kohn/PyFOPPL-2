@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 ##
 # 19. Dec 2017, Tobias Kohn
-# 27. Jan 2018, Tobias Kohn
+# 31. Jan 2018, Tobias Kohn
 #
 from . import test_distributions
 
@@ -53,6 +53,8 @@ class Options(object):
 
     # Some models with loops (e.g. neural_net_model) do not compile with this flag set on
     require_unique_names = False
+
+    dist_param_wrapper = None
 
 
 # Stubs to make the Python-IDE happy
