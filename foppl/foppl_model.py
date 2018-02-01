@@ -185,7 +185,7 @@ class Model(object):
     def gen_prior_samples(self):
         state = {}
         for node in self.compute_nodes:
-            node.update(state)
+            node.update_sampling(state)
         if self.debug_prints is not None:
             try:
                 for n, dp in self.debug_prints:

@@ -27,7 +27,8 @@ class Distribution(object):
                  transform_flag:bool=False,
                  transform_forward:str=None, transform_inverse:str=None,
                  transform_distribution:str=None, transforms:tuple=None,
-                 foppl_name:str=None, python_name:str=None):
+                 foppl_name:str=None, python_name:str=None,
+                 sample_method:str=None):
         assert type(name) is str
         self.name = name
         self.foppl_name = name.lower() if foppl_name is None else foppl_name
@@ -51,27 +52,57 @@ class Distribution(object):
         self.transform_forward = transform_forward
         self.transform_inverse = transform_inverse
         self.transform_distribution = transform_distribution
+        self.has_transformations = transform_distribution is not None
+        self.sample_method = sample_method if sample_method is not None else Config.sample_method
+
 
     def check_arguments(self, args:list, throw_error:bool=False):
         return True
 
-    def create_code(self, args:list):
-        return "dist.{}({})".format(self.python_name, ', '.join(args))
+    def _create_arguments(self, args:list):
+        wrapper = Config.dist_param_wrapper
+
+        def wrap(param, arg):
+            if param is None:
+                return "{}({})".format(wrapper, arg) if wrapper is not None else arg
+            elif param != 'total_count' and wrapper is not None:
+                return "{}={}({})".format(param, wrapper, arg)
+            else:
+                return "{}={}".format(param, arg)
+
+        if len(self.params) == len(args) and Config.dist_use_keyword_parameters:
+            result = ', '.join([wrap(p, a) for p, a in zip(self.params, args)])
+        else:
+            result = ', '.join([wrap(None, a) for a in args])
+
+        if self.has_transform_flag:
+            if result != '':
+                result += ', transformed={}'.format(self.transform_flag)
+            else:
+                result = 'transformed={}'.format(self.transform_flag)
+
+        return result
+
+    def generate_code(self, args:list):
+        return "dist.{}({})".format(self.python_name, self._create_arguments(args))
 
     def generate_code_log_pdf(self, args:list, value:str):
-        return "dist.{}().log_pdf()"
-
-    def generate_code_observe(self, args:list, value:str):
-        return None
+        result = "dist.{}({})".format(self.python_name, self._create_arguments(args))
+        result += Config.log_pdf_method.format(value)
+        return result
 
     def generate_code_sample(self, args:list):
-        return "dist.{}({}).sample()"
+        return "dist.{}({})".format(self.python_name, self._create_arguments(args)) + self.sample_method
 
     def get_parameter_count(self):
         return len(self.params)
 
     def get_sample_size(self, args:list):
-        return 1
+        result = self.get_sample_type(args)
+        if isinstance(result, SequenceType):
+            return result.size
+        else:
+            return 1
 
     def get_sample_type(self, args:list):
         if self.distribution_type == DistributionType.CONTINUOUS:
@@ -183,7 +214,7 @@ distributions = {
     Distribution('Exponential', DistributionType.CONTINUOUS, ['rate'],
                  has_transform_flag=True, transform_flag=True),
     Distribution('Gamma',       DistributionType.CONTINUOUS, ['alpha', 'beta'],
-                 has_transform_flag=True),
+                 has_transform_flag=True, transform_flag=True),
     Distribution('HalfCauchy',  DistributionType.CONTINUOUS, ['mu', 'gamma'], foppl_name='half_cauchy'),
     Distribution('LogGamma',    DistributionType.CONTINUOUS, ['alpha', 'beta'],
                  has_transform_flag=True, foppl_name=''),

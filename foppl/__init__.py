@@ -57,6 +57,8 @@ class Config(object):
 
     dist_param_wrapper = None
 
+    dist_use_keyword_parameters = True
+
     sample_method = '.sample()'
 
     log_pdf_method = '.log_prob({})'

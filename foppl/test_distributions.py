@@ -33,6 +33,7 @@ class dist(object):
     Binomial = Dummy
     Categorical = Dummy
     Dirichlet = Dummy
+    Exponential = Dummy
     Gamma = Dummy
     LogGamma = Dummy
     MultivariateNormal = Dummy
