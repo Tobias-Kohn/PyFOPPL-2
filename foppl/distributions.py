@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 17. Jan 2018, Tobias Kohn
-# 29. Jan 2018, Tobias Kohn
+# 01. Feb 2018, Tobias Kohn
 #
 from .code_objects import *
 from .code_types import *
@@ -55,6 +55,15 @@ class Distribution(object):
 
     def create_code(self, args:list):
         return "dist.{}({})".format(self.python_name, ', '.join(args))
+
+    def generate_code_log_pdf(self, args:list, value:str):
+        return "dist.{}().log_pdf()"
+
+    def generate_code_observe(self, args:list, value:str):
+        return None
+
+    def generate_code_sample(self, args:list):
+        return "dist.{}({}).sample()"
 
     def get_parameter_count(self):
         return len(self.params)
@@ -177,7 +186,7 @@ distributions = {
     Distribution('LogGamma',    DistributionType.CONTINUOUS, ['alpha', 'beta'],
                  has_transform_flag=True, foppl_name=''),
     Distribution('LogNormal',   DistributionType.CONTINUOUS, ['mu', 'sigma'], foppl_name='log_normal'),
-    Distribution('Multinomial', DistributionType.DISCRETE,   ['total_count','probs', 'n']),
+    Distribution('Multinomial', DistributionType.DISCRETE,   ['total_count', 'probs', 'n']),
     Distribution('MultivariateNormal',
                                 DistributionType.CONTINUOUS, ['mu', 'covariance_matrix'], foppl_name='mvn',
                                 vector_sample=True),
