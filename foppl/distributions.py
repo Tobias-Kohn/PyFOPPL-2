@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 17. Jan 2018, Tobias Kohn
-# 31. Jan 2018, Tobias Kohn
+# 29. Jan 2018, Tobias Kohn
 #
 from .code_objects import *
 from .code_types import *
@@ -160,30 +160,30 @@ class CategoricalDistribution(Distribution):
 
 distributions = {
     Distribution('Bernoulli',   DistributionType.DISCRETE,   ['probs']),
-    Distribution('Beta',        DistributionType.CONTINUOUS, ['concentration0', 'concentration1']),
+    Distribution('Beta',        DistributionType.CONTINUOUS, ['alpha', 'beta']),
     BinomialDistribution(
                  'Binomial',    DistributionType.CONTINUOUS, ['total_count', 'probs']),
     CategoricalDistribution(
                  'Categorical', DistributionType.DISCRETE,   ['probs']),
-    Distribution('Cauchy',      DistributionType.CONTINUOUS, ['loc', 'gamma']),
-    Distribution('Dirichlet',   DistributionType.CONTINUOUS, ['concentration0'],
+    Distribution('Cauchy',      DistributionType.CONTINUOUS, ['mu', 'gamma']),
+    Distribution('Dirichlet',   DistributionType.CONTINUOUS, ['alpha'],
                  vector_sample=True),
     Distribution('Discrete',    DistributionType.DISCRETE,   None),
     Distribution('Exponential', DistributionType.CONTINUOUS, ['rate'],
                  has_transform_flag=True),
-    Distribution('Gamma',       DistributionType.CONTINUOUS, ['concentration0', 'concentration1'],
-                 has_transform_flag=True, transforms=('bijector.Log', 'bijector.Exp', 'LogGamma')),
-    Distribution('HalfCauchy',  DistributionType.CONTINUOUS, ['loc', 'gamma'], foppl_name='half_cauchy'),
-    Distribution('LogGamma',    DistributionType.CONTINUOUS, ['concentration0', 'concentration1'],
+    Distribution('Gamma',       DistributionType.CONTINUOUS, ['alpha', 'beta'],
+                 has_transform_flag=True),
+    Distribution('HalfCauchy',  DistributionType.CONTINUOUS, ['mu', 'gamma'], foppl_name='half_cauchy'),
+    Distribution('LogGamma',    DistributionType.CONTINUOUS, ['alpha', 'beta'],
                  has_transform_flag=True, foppl_name=''),
-    Distribution('LogNormal',   DistributionType.CONTINUOUS, ['loc', 'scale'], foppl_name='log_normal'),
-    Distribution('Multinomial', DistributionType.DISCRETE,   ['total_count', 'probs']),
+    Distribution('LogNormal',   DistributionType.CONTINUOUS, ['mu', 'sigma'], foppl_name='log_normal'),
+    Distribution('Multinomial', DistributionType.DISCRETE,   ['total_count','probs', 'n']),
     Distribution('MultivariateNormal',
-                                DistributionType.CONTINUOUS, ['loc', 'covariance_matrix'], foppl_name='mvn',
+                                DistributionType.CONTINUOUS, ['mu', 'covariance_matrix'], foppl_name='mvn',
                                 vector_sample=True),
-    Distribution('Normal',      DistributionType.CONTINUOUS, ['loc', 'scale']),
-    Distribution('Poisson',     DistributionType.DISCRETE,   ['rate']),
-    Distribution('Uniform',     DistributionType.CONTINUOUS, ['low', 'high'])
+    Distribution('Normal',      DistributionType.CONTINUOUS, ['mu', 'sigma']),
+    Distribution('Poisson',     DistributionType.DISCRETE,   ['lam']),
+    Distribution('Uniform',     DistributionType.CONTINUOUS, ['a', 'b'])
 }
 
 distributions_map = { d.foppl_name: d.python_name for d in distributions if d.name != '' }

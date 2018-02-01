@@ -65,8 +65,8 @@ log_pdf += dist.Normal((state['x1'] + state['x2'])/2, 1).log_pdf(3)
 ```
 Both computations are facilitated by the methods `update` and `update_pdf` of the node.
 """
-from . import Options, Config, runtime
-from .foppl_distributions import distributions
+from . import Options, runtime
+from . import distributions
 from .basic_imports import *
 
 ####################################################################################################
@@ -168,7 +168,7 @@ class ConditionNode(GraphNode):
         self.op = op
         self.condition = condition
         self.function = function
-        code = (condition.to_py() + Config.conditional_suffix if condition else "None")
+        code = (condition.to_py() + Options.conditional_suffix if condition else "None")
         self.code = _LAMBDA_PATTERN_.format(code)
         self.full_code = "state['{}'] = {}".format(self.name, code)
         self.function_code = _LAMBDA_PATTERN_.format(function.to_py() if function else "None")
@@ -296,7 +296,7 @@ class Vertex(GraphNode):
     `distribution_name`:
       The name of the distribution, such as `Normal` or `Gamma`.
     `distribution_type`:
-      Either `continuous` or `discrete`. You will usually query this field using one of the properties
+      Either `"continuous"` or `"discrete"`. You will usually query this field using one of the properties
       `is_continuous` or `is_discrete`.
     `observation`:
       The observation in an AST/IR-structure, which is usually not used directly, but rather for internal purposes.
@@ -348,7 +348,8 @@ class Vertex(GraphNode):
         self.conditions = conditions
         self.dependent_conditions = set()
         self.distribution_name = distribution.name
-        self.distribution_type = distributions.get(distribution.name, 'unknown')
+        dist = distributions.get_distribution_for_name(distribution.name)
+        self.distribution_type = str(dist.distribution_type) if dist is not None else "unknown"
         self.support_size = distribution.get_support_size()
         self.sample_size = distribution.get_sample_size()
         self.code = _LAMBDA_PATTERN_TF_.format(self.distribution.to_py())
@@ -412,11 +413,11 @@ class Vertex(GraphNode):
 
     @property
     def is_continuous(self):
-        return self.distribution_type == 'continuous'
+        return self.distribution_type == str(distributions.DistributionType.CONTINUOUS)
 
     @property
     def is_discrete(self):
-        return self.distribution_type == 'discrete'
+        return self.distribution_type == str(distributions.DistributionType.DISCRETE)
 
     @property
     def is_observed(self):

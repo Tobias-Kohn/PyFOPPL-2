@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Jan 2018, Tobias Kohn
-# 26. Jan 2018, Tobias Kohn
+# 31. Jan 2018, Tobias Kohn
 #
 import math as _math
 import random as _random
@@ -19,23 +19,26 @@ class dist(object):
 
     class Dummy(object):
 
-        def __init__(self, *args):
+        def __init__(self, *args, **kwargs):
             pass
 
         def log_pdf(self, value):
             return 0
+
+        log_prob = log_pdf
 
         def sample(self):
             return 1
 
     Binomial = Dummy
     Dirichlet = Dummy
+    LogGamma = Dummy
     MultivariateNormal = Dummy
     Poisson = Dummy
 
     class Categorical(object):
 
-        def __init__(self, ps):
+        def __init__(self, ps, **args):
             if type(ps) is list:
                 self.ps = ps
             else:
@@ -47,28 +50,34 @@ class dist(object):
             else:
                 return 1
 
+        log_prob = log_pdf
+
         def sample(self):
             return _random.randint(0, len(self.ps)-1)
 
     class Gamma(object):
 
-        def __init__(self, *arg, transformed:bool=None):
+        def __init__(self, *arg, transformed:bool=None, **args):
             pass
 
         def log_pdf(self, value):
             return 0
+
+        log_prob = log_pdf
 
         def sample(self):
             return 1
 
     class Normal(object):
 
-        def __init__(self, mu, sigma):
-            self.mu = mu
-            self.sigma = sigma
+        def __init__(self, loc, **args):
+            self.mu = loc
+            self.sigma = 1.0
 
         def log_pdf(self, value):
             return -1/2 * (((value - self.mu)**2 / self.sigma) + _math.log(2 * _math.pi * self.sigma))
+
+        log_prob = log_pdf
 
         def sample(self):
             return _random.gauss(self.mu, self.sigma)

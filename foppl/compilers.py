@@ -4,12 +4,12 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Dec 2017, Tobias Kohn
-# 29. Jan 2018, Tobias Kohn
+# 31. Jan 2018, Tobias Kohn
 #
 import math
 from . import foppl_objects
 from . import foppl_parser
-from . import foppl_distributions
+from . import distributions
 from . import py_parser
 from .foppl_ast import *
 from .code_objects import *
@@ -448,7 +448,8 @@ class Compiler(Walker):
                 # We made sure in `visit_vector` that a vector with a distribution contains the same
                 # type of distribution and nothing else, i.\,e. all distributions are of type `normal`.
                 distr_name = seq_expr.head.name
-                arg_count = foppl_distributions.get_arg_count(distr_name)
+                dist = distributions.get_distribution_for_name(distr_name)
+                arg_count = dist.parameter_count if dist is not None else 0
                 args = [makeVector([item.args[k] for item in seq_expr.items]) for k in range(arg_count)]
                 args = [makeSubscript(arg, idx_expr) for arg in args]
                 return graph, CodeDistribution(distr_name, args)
