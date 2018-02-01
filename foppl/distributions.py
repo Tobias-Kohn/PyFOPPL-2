@@ -181,7 +181,7 @@ distributions = {
                  vector_sample=True),
     Distribution('Discrete',    DistributionType.DISCRETE,   None),
     Distribution('Exponential', DistributionType.CONTINUOUS, ['rate'],
-                 has_transform_flag=True),
+                 has_transform_flag=True, transform_flag=True),
     Distribution('Gamma',       DistributionType.CONTINUOUS, ['alpha', 'beta'],
                  has_transform_flag=True),
     Distribution('HalfCauchy',  DistributionType.CONTINUOUS, ['mu', 'gamma'], foppl_name='half_cauchy'),
