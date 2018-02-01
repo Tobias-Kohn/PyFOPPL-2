@@ -4,8 +4,9 @@
 # License: MIT (see LICENSE.txt)
 #
 # 16. Jan 2018, Tobias Kohn
-# 31. Jan 2018, Tobias Kohn
+# 01. Feb 2018, Tobias Kohn
 #
+from . import Config
 from .graphs import *
 from .code_types import *
 
@@ -101,11 +102,12 @@ class CodeDistribution(CodeObject):
         else:
             self.dist = None
             self.has_transform_flag = False
+            raise RuntimeError("Could not find distribution for '{}'".format(name))
 
     def __repr__(self):
         args = [repr(a) for a in self.args]
-        if Options.dist_param_wrapper is not None and Options.dist_param_wrapper != '':
-            args = ['{}({})'.format(Options.dist_param_wrapper, a) for a in args]
+        if Config.dist_param_wrapper is not None and Config.dist_param_wrapper != '':
+            args = ['{}({})'.format(Config.dist_param_wrapper, a) for a in args]
             if self.dist is not None:
                 params = self.dist.params
                 if len(params) == len(args):
@@ -117,8 +119,8 @@ class CodeDistribution(CodeObject):
 
     def to_py(self, state:dict=None):
         args = [a.to_py(state) for a in self.args]
-        if Options.dist_param_wrapper is not None and Options.dist_param_wrapper != '':
-            wrapper = '{}({{}})'.format(Options.dist_param_wrapper)
+        if Config.dist_param_wrapper is not None and Config.dist_param_wrapper != '':
+            wrapper = '{}({{}})'.format(Config.dist_param_wrapper)
         else:
             wrapper = '{}'
 

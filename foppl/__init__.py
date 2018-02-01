@@ -4,10 +4,8 @@
 # License: MIT (see LICENSE.txt)
 ##
 # 19. Dec 2017, Tobias Kohn
-# 31. Jan 2018, Tobias Kohn
+# 01. Feb 2018, Tobias Kohn
 #
-from . import test_distributions
-
 class Options(object):
     """
     This class provides flags and general options to control the compilation process.

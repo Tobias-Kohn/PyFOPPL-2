@@ -15,7 +15,7 @@ from .foppl_ast import *
 from .code_objects import *
 from .graphs import *
 from . import foppl_dataloader
-from .foppl_transformations import Transformations
+#from .foppl_transformations import Transformations
 
 
 class Scope(object):
@@ -859,15 +859,15 @@ class Compiler(Walker):
         obs_graph, obs_value = node.value.walk(self)
         if not isinstance(dist, CodeDistribution):
             raise TypeError("'observe' requires a distribution as first parameter, not '{}'".format(dist))
-        transform = getattr(Transformations, dist.name, None)
-        if transform is not None:
-            forward, _, new_dist = transform()
-            if forward is not None and forward != "":
-                obs_value = CodeFunctionCall(forward, [obs_value])
-            dist = CodeDistribution(new_dist, dist.args)
+        # transform = getattr(Transformations, dist.name, None)
+        # if transform is not None:
+        #     forward, _, new_dist = transform()
+        #     if forward is not None and forward != "":
+        #         obs_value = CodeFunctionCall(forward, [obs_value])
+        #     dist = CodeDistribution(new_dist, dist.args)
         vertex = Vertex(ancestor_graph=merge(graph, obs_graph), distribution=dist, observation=obs_value,
                         conditions=self.current_conditions(), line_number=node.line_number,
-                        transform_flag=transform is not None)
+                        transform_flag=dist.has_transform_flag)
         graph = Graph({vertex}).merge(graph)
         self._merge_graph(graph)
         return Graph.EMPTY, CodeObserve(vertex)
@@ -876,19 +876,19 @@ class Compiler(Walker):
         graph, dist = node.distribution.walk(self)
         if not isinstance(dist, CodeDistribution):
             raise TypeError("'sample' requires a distribution as first parameter, not '{}'".format(dist))
-        transform = getattr(Transformations, dist.name, None)
-        if transform is not None:
-            _, invert, new_dist = transform()
-            dist = CodeDistribution(new_dist, dist.args)
-        else:
-            invert = None
+        # transform = getattr(Transformations, dist.name, None)
+        # if transform is not None:
+        #     _, invert, new_dist = transform()
+        #     dist = CodeDistribution(new_dist, dist.args)
+        # else:
+        #     invert = None
         vertex = Vertex(ancestor_graph=graph, distribution=dist, conditions=self.current_conditions(),
-                        line_number=node.line_number, transform_flag=transform is not None)
+                        line_number=node.line_number, transform_flag=dist.has_transform_flag)
         graph = Graph({vertex}).merge(graph)
         self._merge_graph(graph)
         code = CodeSample(vertex)
-        if invert is not None and invert != "":
-            code = CodeFunctionCall(invert, [code], is_transform_inverse=True)
+        #if invert is not None and invert != "":
+        #    code = CodeFunctionCall(invert, [code], is_transform_inverse=True)
         return graph, code
 
     def visit_sqrt(self, node: AstSqrt):
