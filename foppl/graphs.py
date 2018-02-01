@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 31. Jan 2018, Tobias Kohn
+# 01. Feb 2018, Tobias Kohn
 #
 """
 # PyFOPPL: Vertices and Graph
@@ -316,7 +316,8 @@ class Vertex(GraphNode):
     """
 
     def __init__(self, *, name:str=None, ancestors:set=None, data:set=None, distribution=None, observation=None,
-                 ancestor_graph=None, conditions:list=None, line_number:int=-1, transform_flag:bool=False):
+                 ancestor_graph=None, conditions:list=None, line_number:int=-1, transform_flag:bool=False,
+                 dist:distributions.Distribution=None):
         from . import code_types
         if name is None:
             name = self.__class__.__gen_symbol__('y' if observation is not None else 'x')
@@ -367,7 +368,7 @@ class Vertex(GraphNode):
             self.full_code = "state['{}'] = {}.sample()".format(self.name, code)
             self.full_code_pdf = self._get_cond_code("log_pdf += {}.log_pdf(state['{}'])".format(code, self.name))
         self.line_number = line_number
-        self.transform_flag = transform_flag
+        self.transform_flag = transform_flag or (dist.transform_flag if dist is not None else False)
 
     def __repr__(self):
         result = "{}:\n" \

@@ -24,6 +24,7 @@ class Distribution(object):
 
     def __init__(self, name:str, distributions_type:DistributionType=None, params:list=None,
                  *, has_transform_flag:bool=False, vector_sample:bool=False,
+                 transform_flag:bool=False,
                  transform_forward:str=None, transform_inverse:str=None,
                  transform_distribution:str=None, transforms:tuple=None,
                  foppl_name:str=None, python_name:str=None):
@@ -40,6 +41,7 @@ class Distribution(object):
         else:
             self.params = params
         self.has_transform_flag = has_transform_flag
+        self.transform_flag = transform_flag
         self._vector_sample = vector_sample
         if transforms is not None:
             fd, inv, dist = transforms
