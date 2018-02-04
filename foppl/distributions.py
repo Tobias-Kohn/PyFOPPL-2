@@ -204,7 +204,7 @@ distributions = {
     Distribution('Bernoulli',   DistributionType.DISCRETE,   ['probs']),
     Distribution('Beta',        DistributionType.CONTINUOUS, ['alpha', 'beta']),
     BinomialDistribution(
-                 'Binomial',    DistributionType.CONTINUOUS, ['total_count', 'probs']),
+                 'Binomial',    DistributionType.DISCRETE, ['total_count', 'probs']),
     CategoricalDistribution(
                  'Categorical', DistributionType.DISCRETE,   ['probs']),
     Distribution('Cauchy',      DistributionType.CONTINUOUS, ['mu', 'gamma']),
@@ -223,7 +223,7 @@ distributions = {
     Distribution('MultivariateNormal',
                                 DistributionType.CONTINUOUS, ['mu', 'covariance_matrix'], foppl_name='mvn',
                                 vector_sample=True),
-    Distribution('Normal',      DistributionType.CONTINUOUS, ['mu', 'sigma']),
+    Distribution('Normal',      DistributionType.CONTINUOUS, ['loc', 'scale']),
     Distribution('Poisson',     DistributionType.DISCRETE,   ['lam']),
     Distribution('Uniform',     DistributionType.CONTINUOUS, ['a', 'b'])
 }
