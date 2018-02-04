@@ -58,10 +58,12 @@ class CodeCompare(CodeObject):
         return self.op == '>=' and repr(self.right) == '0'
 
     def __repr__(self):
-        return "({}{}{})".format(repr(self.left), self.op, repr(self.right))
+        op = "==" if self.op == "=" else self.op
+        return "({}{}{})".format(repr(self.left), op, repr(self.right))
 
     def to_py(self, state:dict=None):
-        return "({}{}{})".format(self.left.to_py(state), self.op, self.right.to_py(state))
+        op = "==" if self.op == "=" else self.op
+        return "({}{}{})".format(self.left.to_py(state), op, self.right.to_py(state))
 
 
 class CodeDataSymbol(CodeObject):
