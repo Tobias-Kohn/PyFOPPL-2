@@ -61,7 +61,7 @@ class Config(object):
 
     sample_method = '.sample()'
 
-    log_pdf_method = '.log_prob({})'
+    log_pdf_method = '.log_pdf({})'
 
 
 # Stubs to make the Python-IDE happy
