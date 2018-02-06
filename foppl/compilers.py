@@ -904,6 +904,12 @@ class Compiler(Walker):
     def visit_symbol(self, node: AstSymbol):
         result = self.resolve_symbol(node.name)
         if result is None:
+            if len(node.name) > 1 and node.name.startswith('-'):
+                result = self.resolve_symbol(node.name[1:])
+                if result is not None:
+                    raise NameError("the symbol '{}' cannot be found. Did you mean '(- {})'?".format(
+                        node.name, node.name[1:]
+                    ))
             raise NameError("symbol '{}' not found".format(node.name))
         return result
 
