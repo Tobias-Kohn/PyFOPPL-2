@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 07. Feb 2018, Tobias Kohn
+# 09. Feb 2018, Tobias Kohn
 #
 class AstNode(object):
     """
@@ -165,20 +165,31 @@ class Visitor(object):
 
 #######################################################################################################################
 
-class AstBinary(AstNode):
+class AstControl(AstNode):
+    pass
+
+class AstLeaf(AstNode):
+    pass
+
+class AstOperator(AstNode):
+    pass
+
+#######################################################################################################################
+
+class AstBinary(AstOperator):
 
     __binary_ops = {
-        '+':  'add',
-        '-':  'sub',
-        '*':  'mul',
-        '/':  'div',
-        '%':  'mod',
-        '//': 'idiv',
-        '**': 'pow',
-        '<<': 'shl',
-        '>>': 'shr',
-        '&':  'and',
-        '|':  'or'
+        '+':  ('add',  lambda x, y: x + y),
+        '-':  ('sub',  lambda x, y: x - y),
+        '*':  ('mul',  lambda x, y: x * y),
+        '/':  ('div',  lambda x, y: x / y),
+        '%':  ('mod',  lambda x, y: x % y),
+        '//': ('idiv', lambda x, y: x // y),
+        '**': ('pow',  lambda x, y: x ** y),
+        '<<': ('shl',  lambda x, y: x << y),
+        '>>': ('shr',  lambda x, y: x >> y),
+        '&':  ('and',  lambda x, y: x & y),
+        '|':  ('or',   lambda x, y: x | y),
     }
 
     def __init__(self, left:AstNode, op:str, right:AstNode):
@@ -192,12 +203,16 @@ class AstBinary(AstNode):
         return "({}{}{})".format(repr(self.left), self.op, repr(self.right))
 
     def get_visitor_names(self):
-        name = 'visit_binary_' + self.__binary_ops[self.op]
+        name = 'visit_binary_' + self.op_name
         return [name] + super(AstBinary, self).get_visitor_names()
 
     @property
+    def op_function(self):
+        return self.__binary_ops[self.op][1]
+
+    @property
     def op_name(self):
-        return self.__binary_ops[self.op]
+        return self.__binary_ops[self.op][0]
 
 
 class AstBody(AstNode):
@@ -216,24 +231,25 @@ class AstCall(AstNode):
     def __init__(self, function, args:list):
         self.function = function
         self.args = args
-        assert(type(function) is str)
+        self.function_name = function if type(function) is str else function.name # type:str
+        assert(type(function) is str or isinstance(function, AstFunction))
         assert(all([isinstance(arg, AstNode) for arg in args]))
 
     def __repr__(self):
-        function = self.function
+        function = self.function if type(self.function) is str else repr(self.function)
         args = [repr(arg) for arg in self.args]
         return "{}({})".format(function, ', '.join(args))
 
 
-class AstCompare(AstNode):
+class AstCompare(AstOperator):
 
     __cmp_ops = {
-        '==': 'eq',
-        '!=': 'ne',
-        '<':  'lt',
-        '<=': 'le',
-        '>':  'gt',
-        '>=': 'ge',
+        '==': ('eq', lambda x, y: x == y),
+        '!=': ('ne', lambda x, y: x != y),
+        '<':  ('lt', lambda x, y: x < y),
+        '<=': ('le', lambda x, y: x <= y),
+        '>':  ('gt', lambda x, y: x > y),
+        '>=': ('ge', lambda x, y: x >= y),
     }
 
     def __init__(self, left:AstNode, op:str, right:AstNode):
@@ -249,15 +265,61 @@ class AstCompare(AstNode):
         return "({}{}{})".format(repr(self.left), self.op, repr(self.right))
 
     def get_visitor_names(self):
-        name = 'visit_binary_' + self.__cmp_ops[self.op]
+        name = 'visit_binary_' + self.op_name
         return [name] + super(AstCompare, self).get_visitor_names()
 
     @property
+    def op_function(self):
+        return self.__cmp_ops[self.op][1]
+
+    @property
     def op_name(self):
-        return self.__cmp_ops[self.op]
+        return self.__cmp_ops[self.op][0]
 
 
-class AstIf(AstNode):
+class AstDef(AstNode):
+
+    def __init__(self, name:str, value:AstNode):
+        self.name = name
+        self.value = value
+        assert(type(name) is str)
+        assert(isinstance(value, AstNode))
+
+    def __repr__(self):
+        return "{} := {}".format(self.name, repr(self.value))
+
+
+class AstFor(AstControl):
+
+    def __init__(self, target:str, source:AstNode, body:AstNode):
+        self.target = target
+        self.source = source
+        self.body = body
+        assert(type(target) is str)
+        assert(isinstance(source, AstNode))
+        assert(isinstance(body, AstNode))
+
+    def __repr__(self):
+        return "for {} in {}: ({})".format(self.target, repr(self.source), repr(self.body))
+
+
+class AstFunction(AstNode):
+
+    def __init__(self, name:str, parameters:list, body:AstNode):
+        if name is None:
+            name = '__lambda__'
+        self.name = name
+        self.parameters = parameters
+        self.body = body
+        assert(type(name) is str and name != '')
+        assert(type(parameters) is list and all([type(p) is str for p in parameters]))
+        assert(isinstance(body, AstNode))
+
+    def __repr__(self):
+        return "{}({}): ({})".format(self.name, ', '.join(self.parameters), repr(self.body))
+
+
+class AstIf(AstControl):
 
     def __init__(self, compare:AstCompare, if_node:AstNode, else_node:AstNode):
         self.compare = compare
@@ -274,12 +336,28 @@ class AstIf(AstNode):
             return "if {} then {} else {}".format(repr(self.compare), repr(self.if_node), repr(self.else_node))
 
 
-class AstUnary(AstNode):
+class AstLet(AstNode):
+
+    def __init__(self, targets:list, sources:list, body:AstNode):
+        self.targets = targets
+        self.sources = sources
+        self.body = body
+        assert(type(targets) is list and all([type(target) in (str, tuple) for target in targets]))
+        assert(type(sources) is list and all([isinstance(source, AstNode) for source in sources]))
+        assert(len(targets) == len(sources) and len(targets) > 0)
+        assert(isinstance(body, AstNode))
+
+    def __repr__(self):
+        bindings = ['{} := {}'.format(target, repr(source)) for target, source in zip(self.targets, self.sources)]
+        return "let [{}] in ({})".format('; '.join(bindings), repr(self.body))
+
+
+class AstUnary(AstOperator):
 
     __unary_ops = {
-        '+': 'plus',
-        '-': 'minus',
-        'not': 'not',
+        '+':   ('plus',  lambda x: x),
+        '-':   ('minus', lambda x: -x),
+        'not': ('not',   lambda x: not x),
     }
 
     def __init__(self, op:str, item:AstNode):
@@ -292,15 +370,19 @@ class AstUnary(AstNode):
         return "{}{}".format(self.op, repr(self.item))
 
     def get_visitor_names(self):
-        name = 'visit_unary_' + self.__unary_ops[self.op]
+        name = 'visit_unary_' + self.op_name
         return [name] + super(AstUnary, self).get_visitor_names()
 
     @property
+    def op_function(self):
+        return self.__unary_ops[self.op][1]
+
+    @property
     def op_name(self):
-        return self.__unary_ops[self.op]
+        return self.__unary_ops[self.op][0]
 
 
-class AstSymbol(AstNode):
+class AstSymbol(AstLeaf):
 
     def __init__(self, name:str):
         self.name = name
@@ -310,7 +392,7 @@ class AstSymbol(AstNode):
         return self.name
 
 
-class AstValue(AstNode):
+class AstValue(AstLeaf):
 
     def __init__(self, value):
         self.value = value
@@ -318,3 +400,48 @@ class AstValue(AstNode):
 
     def __repr__(self):
         return repr(self.value)
+
+
+class AstValueVector(AstLeaf):
+
+    def __init__(self, items:list):
+        self.items = items
+
+        def is_value_vector(v):
+            if type(v) in (list, tuple):
+                return all([is_value_vector(w) for w in v])
+            else:
+                return type(v) in [bool, float, int, str]
+
+        assert(type(items) is list and is_value_vector(items))
+
+    def __getitem__(self, item):
+        return self.items[item]
+
+    def __len__(self):
+        return len(self.items)
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __repr__(self):
+        return repr(self.items)
+
+
+class AstVector(AstNode):
+
+    def __init__(self, items:list):
+        self.items = items
+        assert(type(items) is list and all([isinstance(item, AstNode) for item in items]))
+
+    def __getitem__(self, item):
+        return self.items[item]
+
+    def __len__(self):
+        return len(self.items)
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __repr__(self):
+        return "[{}]".format(', '.join([repr(item) for item in self.items]))

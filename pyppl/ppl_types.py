@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 07. Feb 2018, Tobias Kohn
+# 09. Feb 2018, Tobias Kohn
 #
 class Type(object):
 
@@ -175,7 +175,111 @@ class SequenceType(Type):
 
 class FunctionType(Type):
 
-    pass
+    def __init__(self, *, name:str, base=None, param_count:int=None, has_var_args:bool=False, has_kw_args:bool=False,
+                 parameter_types:list=None, result_type:Type=None):
+        super(FunctionType, self).__init__(name=name, base=base)
+        self._empty = param_count is None and parameter_types is None and result_type is None
+        if result_type is None:
+            result_type = AnyType
+        if parameter_types is not None:
+            if type(parameter_types) is tuple:
+                parameter_types = list(parameter_types)
+            if param_count is None:
+                param_count = len(parameter_types)
+            else:
+                assert(len(parameter_types) == param_count)
+        else:
+            if param_count is not None and param_count > 0:
+                parameter_types = [AnyType] * param_count
+            else:
+                param_count = 0
+                parameter_types = []
+        self.parameter_types = parameter_types # type:list
+        self.result_type = result_type
+        self.param_count = param_count
+        self.has_var_args = has_var_args
+        self.has_kw_args = has_kw_args
+        assert(isinstance(result_type, Type))
+        assert(type(self.param_count) is int)
+        assert(type(self.has_var_args) is bool and type(self.has_kw_args) is bool)
+        assert(type(self.parameter_types) is list)
+        assert(all([isinstance(item, Type) for item in self.parameter_types]))
+
+    def __eq__(self, other):
+        if other is self:
+            return True
+        elif isinstance(other, FunctionType):
+            return self.result_type == other.result_type and \
+                   self.param_count == other.param_count and \
+                   all([a == b for a, b in zip(self.parameter_types, other.parameter_types)]) and \
+                   self.has_kw_args == other.has_kw_args and \
+                   self.has_var_args == other.has_var_args
+        else:
+            return False
+
+    def __hash__(self):
+        return hash((tuple(self.parameter_types), self.result_type, self.has_var_args, self.has_kw_args))
+
+    def __repr__(self):
+        return "({})=>{}".format(', '.join([repr(item) for item in self.parameter_types]), repr(self.result_type))
+
+    def __contains__(self, item):
+        if isinstance(item, FunctionType):
+            if item == self:
+                return True
+
+            if item.result_type in self.result_type:
+                if self.param_count == item.param_count:
+                    return all([a in b for a, b in zip(self.parameter_types, item.parameter_types)])
+
+        return False
+
+    def __create_function_type(self, *, param_count=None, parameters=None, result):
+        return FunctionType(name=self.name, base=self, param_count=param_count,
+                            parameter_types=parameters, result_type=result)
+
+    def __getitem__(self, item):
+        if self._empty:
+            if type(item) is tuple and len(item) >= 2 and isinstance(item[-1], Type):
+                result = item[-1]
+                args = item[:-1]
+
+                if len(args) == 1 and type(args[0]) is int:
+                    return self.__create_function_type(param_count=args[0], result=result)
+
+                elif all([isinstance(arg, Type) for arg in args]):
+                    return self.__create_function_type(parameters=args, result=result)
+
+                elif len(args) == 1 and type(args[0]) in (tuple, list) and len(args[0]) == 0:
+                    return self.__create_function_type(param_count=0, result=result)
+
+                elif len(args) == 1 and type(args[0]) in (tuple, list) and \
+                        all([isinstance(arg, Type) for arg in args[0]]):
+                    return self.__create_function_type(parameters=args[0], result=result)
+
+            elif isinstance(item, Type):
+                return self.__create_function_type(param_count=0, result=item)
+
+        raise TypeError("cannot construct '{}'-subtype of '{}'".format(item, self))
+
+    @property
+    def arg_count(self):
+        return self.param_count
+
+    def union(self, other):
+        if isinstance(other, FunctionType):
+            if other == self:
+                return self
+
+            elif self.param_count == other.param_count and self.has_var_args == other.has_var_args and \
+                    self.has_kw_args == other.has_kw_args:
+                params = [p.union(q) for p, q in zip(self.parameter_types, other.parameter_types)]
+                result = self.result_type.union(other.result_type)
+                return self.__create_function_type(parameters=params, result=result)
+
+            return Function
+
+        return super(FunctionType, self).union(other)
 
 
 #######################################################################################################################
@@ -191,6 +295,8 @@ Boolean = Type(name='Boolean', base=Integer)
 List   = SequenceType(name='List',   base=AnyType)
 Tuple  = SequenceType(name='Tuple',  base=AnyType)
 String = SequenceType(name='String', base=AnyType, recursive=True)
+
+Function = FunctionType(name='Function', base=AnyType)
 
 #######################################################################################################################
 
