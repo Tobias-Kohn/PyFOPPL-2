@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 09. Feb 2018, Tobias Kohn
+# 19. Feb 2018, Tobias Kohn
 #
 class Type(object):
 
@@ -51,6 +51,58 @@ class Type(object):
     @property
     def dimension(self):
         return None
+
+    # We implement common operations on the types for easy type inference
+
+    def __add__(self, other):
+        from . import ppl_type_operations
+        if isinstance(other, Type):
+            return ppl_type_operations.add(self, other)
+        else:
+            return NotImplemented
+
+    def __sub__(self, other):
+        from . import ppl_type_operations
+        if isinstance(other, Type):
+            return ppl_type_operations.sub(self, other)
+        else:
+            return NotImplemented
+
+    def __mul__(self, other):
+        from . import ppl_type_operations
+        if isinstance(other, Type):
+            return ppl_type_operations.mul(self, other)
+        else:
+            return NotImplemented
+
+    def __truediv__(self, other):
+        from . import ppl_type_operations
+        if isinstance(other, Type):
+            return ppl_type_operations.div(self, other)
+        else:
+            return NotImplemented
+
+    def __floordiv__(self, other):
+        from . import ppl_type_operations
+        if isinstance(other, Type):
+            return ppl_type_operations.idiv(self, other)
+        else:
+            return NotImplemented
+
+    def __mod__(self, other):
+        from . import ppl_type_operations
+        if isinstance(other, Type):
+            return ppl_type_operations.mod(self, other)
+        else:
+            return NotImplemented
+
+    def __neg__(self):
+        from . import ppl_type_operations
+        return ppl_type_operations.neg(self)
+
+    def __pos__(self):
+        from . import ppl_type_operations
+        return ppl_type_operations.pos(self)
 
 
 #######################################################################################################################

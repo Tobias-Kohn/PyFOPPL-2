@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 09. Feb 2018, Tobias Kohn
+# 19. Feb 2018, Tobias Kohn
 #
 class AstNode(object):
     """
@@ -12,6 +12,7 @@ class AstNode(object):
     but derive a specific AST-node from it.
     """
 
+    _attributes = {'col_offset', 'lineno'}
     tag = None
 
     def get_fields(self):
@@ -95,6 +96,8 @@ class AstNode(object):
         :param visitor: An object with a `visit_XXX`-method.
         :return:        The result returned by the `visit_XXX`-method of the visitor.
         """
+        if getattr(visitor, '__visit_children_first__', False) is True:
+            self.visit_children(visitor)
         method_names = self.get_visitor_names() + ['visit_node', 'generic_visit']
         methods = [getattr(visitor, name, None) for name in method_names]
         methods = [name for name in methods if name is not None]
@@ -163,6 +166,7 @@ class Visitor(object):
         node.visit_children(self)
         return node
 
+
 #######################################################################################################################
 
 class AstControl(AstNode):
@@ -218,7 +222,18 @@ class AstBinary(AstOperator):
 class AstBody(AstNode):
 
     def __init__(self, items:list):
+        if items is None:
+            items = []
         self.items = items
+        # flatten nested bodies:
+        if any(isinstance(item, AstBody) for item in items):
+            new_items = []
+            for item in items:
+                if isinstance(item, AstBody):
+                    new_items += item.items
+                else:
+                    new_items.append(item)
+            self.items = new_items
         assert(type(items) is list)
         assert(all([isinstance(item, AstNode) for item in items]))
 
@@ -279,14 +294,15 @@ class AstCompare(AstOperator):
 
 class AstDef(AstNode):
 
-    def __init__(self, name:str, value:AstNode):
+    def __init__(self, name, value:AstNode):
         self.name = name
         self.value = value
-        assert(type(name) is str)
+        assert(type(name) is str or (type(name) is tuple and all(type(item) is str for item in name)))
         assert(isinstance(value, AstNode))
 
     def __repr__(self):
-        return "{} := {}".format(self.name, repr(self.value))
+        name = "({})".format(', '.join(self.name)) if type(self.name) is tuple else self.name
+        return "{} := {}".format(name, repr(self.value))
 
 
 class AstFor(AstControl):
@@ -352,6 +368,28 @@ class AstLet(AstNode):
         return "let [{}] in ({})".format('; '.join(bindings), repr(self.body))
 
 
+class AstReturn(AstNode):
+
+    def __init__(self, value:AstNode):
+        if value is None:
+            value = AstValue(None)
+        self.value = value
+        assert(isinstance(self.value, AstNode))
+
+    def __repr__(self):
+        return "return {}".format(repr(self.value))
+
+
+class AstSymbol(AstLeaf):
+
+    def __init__(self, name:str):
+        self.name = name
+        assert(type(name) is str)
+
+    def __repr__(self):
+        return self.name
+
+
 class AstUnary(AstOperator):
 
     __unary_ops = {
@@ -382,16 +420,6 @@ class AstUnary(AstOperator):
         return self.__unary_ops[self.op][0]
 
 
-class AstSymbol(AstLeaf):
-
-    def __init__(self, name:str):
-        self.name = name
-        assert(type(name) is str)
-
-    def __repr__(self):
-        return self.name
-
-
 class AstValue(AstLeaf):
 
     def __init__(self, value):
@@ -411,7 +439,7 @@ class AstValueVector(AstLeaf):
             if type(v) in (list, tuple):
                 return all([is_value_vector(w) for w in v])
             else:
-                return type(v) in [bool, float, int, str]
+                return type(v) in [bool, complex, float, int, str]
 
         assert(type(items) is list and is_value_vector(items))
 
@@ -445,3 +473,13 @@ class AstVector(AstNode):
 
     def __repr__(self):
         return "[{}]".format(', '.join([repr(item) for item in self.items]))
+
+#######################################################################################################################
+
+def makeVector(items):
+    if all([isinstance(item, AstValue) for item in items]):
+        return AstValueVector([item.value for item in items])
+    elif all([type(item) in [bool, complex, float, int, str] for item in items]):
+        return AstValueVector(items)
+    else:
+        return AstVector(items)
