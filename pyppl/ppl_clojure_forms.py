@@ -6,6 +6,8 @@
 # 20. Feb 2018, Tobias Kohn
 # 20. Feb 2018, Tobias Kohn
 #
+from typing import Optional
+
 class ClojureObject(object):
 
     _attributes = {'col_offset', 'lineno'}
@@ -36,10 +38,13 @@ class ClojureObject(object):
 
 class Form(ClojureObject):
 
-    def __init__(self, items:list):
+    def __init__(self, items:list, lineno:Optional[int]=None):
         self.items = items
+        if lineno is not None:
+            self.lineno = lineno
         assert type(items) in [list, tuple]
         assert all([isinstance(item, ClojureObject) for item in items])
+        assert lineno is None or type(lineno) is int
 
     def __getitem__(self, item):
         return self.items[item]
@@ -89,9 +94,12 @@ class Form(ClojureObject):
 
 class Symbol(ClojureObject):
 
-    def __init__(self, name:str):
+    def __init__(self, name:str, lineno:Optional[int]=None):
         self.name = name
+        if lineno is not None:
+            self.lineno = lineno
         assert type(name) is str
+        assert lineno is None or type(lineno) is int
 
     def __repr__(self):
         return self.name
@@ -99,9 +107,12 @@ class Symbol(ClojureObject):
 
 class Value(ClojureObject):
 
-    def __init__(self, value):
+    def __init__(self, value, lineno:Optional[int]=None):
         self.value = value
+        if lineno is not None:
+            self.lineno = lineno
         assert type(value) in [bool, complex, float, int, str]
+        assert lineno is None or type(lineno) is int
 
     def __repr__(self):
         return repr(self.value)
@@ -109,10 +120,13 @@ class Value(ClojureObject):
 
 class Vector(ClojureObject):
 
-    def __init__(self, items:list):
+    def __init__(self, items:list, lineno:Optional[int]=None):
         self.items = items
+        if lineno is not None:
+            self.lineno = lineno
         assert type(items) in [list, tuple]
         assert all([isinstance(item, ClojureObject) for item in items])
+        assert lineno is None or type(lineno) is int
 
     def __getitem__(self, item):
         return self.items[item]

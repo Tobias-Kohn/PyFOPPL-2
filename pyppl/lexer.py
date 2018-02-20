@@ -75,7 +75,20 @@ class CategoryCodes(object):
     def __setitem__(self, key, value):
         if type(key) is str and len(key) == 1:
             key = ord(key)
-        elif type(key) is not int or not 0 <= key < len(self.catcodes):
+            self.catcodes[key] = value
+        elif type(key) is int and 0 <= key < len(self.catcodes):
+            self.catcodes[key] = value
+        elif type(key) is slice:
+            start = key.start
+            stop = key.stop
+            if start is not None and stop is not None and key.step is None:
+                if type(start) is str:
+                    start = ord(start)
+                if type(stop) is str:
+                    stop = ord(stop)
+                for i in range(start, stop):
+                    self.catcodes[i] = value
+        else:
             raise TypeError("'{}' is not a valid character".format(key))
 
 
@@ -276,6 +289,13 @@ class Lexer(object):
             source.drop_while(lambda c: self.catcodes[c] == CatCode.WHITESPACE)
             return self.__next__()
 
+        elif source.current in ['+', '-'] and '0' <= source.peek(1) <= '9':
+            sign = source.next()
+            number = self.read_number()
+            if sign == '-':
+                number = -number
+            return pos, TokenType.NUMBER, number
+
         elif cc == CatCode.STRING_DELIMITER:
             return pos, TokenType.STRING, self.read_string()
 
@@ -370,3 +390,37 @@ class Lexer(object):
     def add_keywords(self, *keywords):
         for keyword in keywords:
             self.add_keyword(keyword)
+
+#######################################################################################################################
+
+class BufferedIterator(object):
+
+    def __init__(self, source):
+        self.source = source
+        self.head = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        result = self.next()
+        if result is None:
+            raise StopIteration
+        else:
+            return result
+
+    def next(self):
+        if self.head is not None:
+            result, self.head = self.head, None
+            return result
+        else:
+            return next(self.source, None)
+
+    def peek(self):
+        if self.head is None:
+            self.head = next(self.source, None)
+        return self.head
+
+    @property
+    def has_next(self):
+        return self.peek() is not None
