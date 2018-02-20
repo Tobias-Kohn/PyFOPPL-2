@@ -104,7 +104,7 @@ class AstNode(object):
     def visit(self, visitor):
         """
         The visitor-object given as argument must provide at least one `visit_XXX`-method to be called by this method.
-        Possible names for the `visit_XXX`-method are given by `_get_visitor_names()`. Override that method in order
+        Possible names for the `visit_XXX`-method are given by `get_visitor_names()`. Override that method in order
         to control which visitor-method is actually called.
 
         If the visitor does not provide any specific `visit_XXX`-method to be called, the method will try and call
@@ -198,7 +198,7 @@ class Visitor(object):
         else:
             raise TypeError("cannot walk/visit an object of type '{}'".format(type(ast)))
 
-    def visit_node(self, node: AstNode):
+    def visit_node(self, node:AstNode):
         node.visit_children(self)
         return node
 
