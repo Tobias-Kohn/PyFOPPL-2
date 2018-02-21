@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 20. Feb 2018, Tobias Kohn
+# 21. Feb 2018, Tobias Kohn
 #
 import enum
 
@@ -41,6 +41,9 @@ class CatCode(enum.Enum):
 
 
 class CategoryCodes(object):
+    """
+    This is basically a list that assigns a category code to each character in the ASCII range.
+    """
 
     def __init__(self, char_range:int=128):
         self.catcodes = [CatCode.INVALID for _ in range(char_range)]
@@ -78,6 +81,9 @@ class CategoryCodes(object):
             self.catcodes[key] = value
         elif type(key) is int and 0 <= key < len(self.catcodes):
             self.catcodes[key] = value
+        elif type(key) is tuple:
+            for k in key:
+                self.__setitem__(k, value)
         elif type(key) is slice:
             start = key.start
             stop = key.stop
@@ -220,6 +226,10 @@ class CharacterStream(object):
     def current_pos(self):
         return self._pos
 
+    @property
+    def remaining(self):
+        return len(self.source) - self._pos
+
     @classmethod
     def from_file(cls, filename:str):
         with open(filename, 'r') as f:
@@ -234,9 +244,32 @@ class CharacterStream(object):
 #######################################################################################################################
 
 class Lexer(object):
+    """
+    The lexer takes a string or `CharacterStream` as input, and then reads token by token from this source. It is
+    intended to be used as an iterator, and can be adapted by overriding/changing some of its methods or fields.
 
-    def __init__(self, source:CharacterStream):
-        self.source = source
+    - Adapt the category codes of any characters, or even supplant the field `catcodes` by a new `CategoryCodes`-
+      object.
+    - Use the method `add_keyword(kw)` if you want to register a special name as a keyword. The field `keywords`
+      is a set of all keywords as strings.
+    - The field `ext_symbols` is used for symbols that span more than one character (such as, e.g., `+=` or `<<`).
+      If you want the lexer to recognise special multi-character-symbols, add them to this set of strings. However,
+      note that adding the string might not be enough: in fact, the lexer recognises symbols only if each individual
+      character of it has category code `SYMBOL`.
+    - You can set the fields `line_comment`, or `block_comment_start` and `block_comment_end`, or both in order to
+      have the lexer recognise various comments inside the code. Each of this field is either `None` or a string.
+      Commenting strings do not depend on any special category codes but are always recognised. This could lead to
+      problems if you choose an alphanumeric commenting delimiter, such as `rem`, say, as the lexer would see this
+      commenting delimiter also in instances like `remote` or `lorem ipsum`.
+
+    NB: numbers starting with a digit 0, 1, ..., 9 or a sign `+`/`-` and a digit are always recognised as numbers,
+    independent of any category codes.
+    """
+
+    def __init__(self, source):
+        if type(source) is str:
+            source = CharacterStream.from_string(source)
+        self.source = source                    # type:CharacterStream
         self.catcodes = CategoryCodes()
         self.keywords = set()                   # type:set
         self.ext_symbols = {
@@ -248,6 +281,10 @@ class Lexer(object):
             '..', '...',
             '<~', '~>',
         }
+        self.escapes = {
+            '\\\n': None,
+        }
+        self.string_prefix = set()
         self.line_comment = None
         self.block_comment_start = None
         self.block_comment_end = None
@@ -289,12 +326,17 @@ class Lexer(object):
             source.drop_while(lambda c: self.catcodes[c] == CatCode.WHITESPACE)
             return self.__next__()
 
+        # if + and - are just regular names (e.g., as in Clojure), we still want to parse numbers correctly
         elif source.current in ['+', '-'] and '0' <= source.peek(1) <= '9':
             sign = source.next()
             number = self.read_number()
             if sign == '-':
                 number = -number
             return pos, TokenType.NUMBER, number
+
+        elif self.catcodes[source.peek(1)] == CatCode.STRING_DELIMITER and source.current in self.string_prefix:
+            prefix = source.next()
+            return pos, TokenType.STRING, prefix + self.read_string()
 
         elif cc == CatCode.STRING_DELIMITER:
             return pos, TokenType.STRING, self.read_string()
@@ -311,16 +353,47 @@ class Lexer(object):
 
         elif cc == CatCode.ALPHA:
             name = self.read_name()
-            tt = TokenType.KEYWORD if name in self.keywords else TokenType.SYMBOL
-            return pos, tt, name
+            if self.catcodes[source.current] == CatCode.STRING_DELIMITER and name in self.string_prefix:
+                return pos, TokenType.STRING, name + self.read_string()
+            else:
+                tt = TokenType.KEYWORD if name in self.keywords else TokenType.SYMBOL
+                return pos, tt, name
 
         elif cc == CatCode.NEWLINE:
             return pos, TokenType.NEWLINE, source.next()
+
+        elif cc == CatCode.ESCAPE:
+            result = self.read_escape()
+            if result is None:
+                return self.__next__()
+            elif type(result) is tuple and len(result) == 2:
+                return pos, result[0], result[1]
+            else:
+                return pos, TokenType.SYMBOL, result
 
         else:
             raise SyntaxError("invalid character in input stream: {}/'{}'".format(
                 hex(ord(source.current)), source.current
             ))
+
+    def read_escape(self):
+        escapes = self.escapes.keys()
+        source = self.source
+        i = 0
+        keys = []
+        while i < source.remaining and len(escapes) > 0:
+            c = source.peek(i)
+            escapes = [e[1:] for e in escapes if e.startswith(c)]
+            if '' in escapes:
+                keys.append(source.peek_string(i))
+                escapes.remove('')
+            i += 1
+        if len(keys) > 0:
+            key = keys[-1]
+            source.drop(len(key))
+            return self.escapes[key]
+        else:
+            return self.source.next()
 
     def read_name(self):
         source = self.source
@@ -384,12 +457,31 @@ class Lexer(object):
                 return result + source.next()
         return result
 
+    def add_escape_sequence(self, key:str, target=None):
+        self.escapes[key] = target
+        assert type(key) is str
+
     def add_keyword(self, keyword):
         self.keywords.add(keyword)
 
     def add_keywords(self, *keywords):
         for keyword in keywords:
             self.add_keyword(keyword)
+
+    def add_string_prefix(self, prefix:str):
+        self.string_prefix.add(prefix)
+        assert type(prefix) is str
+
+    def add_symbol(self, symbol:str):
+        self.ext_symbols.add(symbol)
+        assert type(symbol) is str
+
+    def add_symbols(self, *symbols):
+        for symbol in symbols:
+            self.add_symbol(symbol)
+
+    def get_line_from_pos(self, pos):
+        return self.source.get_line_from_pos(pos)
 
 #######################################################################################################################
 

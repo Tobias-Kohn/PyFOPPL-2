@@ -4,9 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 20. Feb 2018, Tobias Kohn
+# 21. Feb 2018, Tobias Kohn
 #
 from typing import Optional
+import inspect
+from ast import copy_location
 
 class ClojureObject(object):
 
@@ -23,13 +25,16 @@ class ClojureObject(object):
         :return:        The result returned by the `visit_XXX`-method of the visitor.
         """
         name = self.__class__.__name__.lower()
-        method_names = ['visit_' + name, 'visit_node', 'generic_visit']
+        method_names = ['visit_' + name + '_form', 'visit_node', 'generic_visit']
         methods = [getattr(visitor, name, None) for name in method_names]
         methods = [name for name in methods if name is not None]
         if len(methods) == 0 and callable(visitor):
             return visitor(self)
         elif len(methods) > 0:
-            return methods[0](self)
+            result = methods[0](self)
+            if hasattr(result, '_attributes'):
+                result = copy_location(result, self)
+            return result
         else:
             raise RuntimeError("visitor '{}' has no visit-methods to call".format(type(visitor)))
 
@@ -59,9 +64,33 @@ class Form(ClojureObject):
         name = self.name
         if name is not None:
             name = name.replace('-', '_').replace('.', '_').replace('/', '_')
+            name = ''.join([n if n.islower() else "_" + n.lower() for n in name])
             method = getattr(visitor, 'visit_' + name, None)
             if method is not None:
-                return method(*self.items[1:])
+                arg_count = len(self.items) - 1
+                has_varargs = inspect.getfullargspec(method).varargs is not None
+                param_count = len(inspect.getfullargspec(method).args) - 1
+                has_correct_arg_count = arg_count >= param_count if has_varargs else arg_count == param_count
+                if not has_correct_arg_count:
+                    s = "at least" if has_varargs else "exactly"
+                    if param_count == 0:
+                        t = "no arguments"
+                    elif param_count == 1:
+                        t = "one argument"
+                    elif param_count == 2:
+                        t = "two arguments"
+                    elif param_count == 3:
+                        t = "three arguments"
+                    else:
+                        t = "{} arguments".format(param_count)
+                    pos = "(line {})".format(self.lineno) if self.lineno is not None else ''
+                    raise TypeError("{}() takes {} {} ({} given) {}".format(self.name, s, t, arg_count, pos))
+
+                result = method(*self.items[1:])
+                if hasattr(result, '_attributes'):
+                    result = copy_location(result, self)
+                return result
+
         return super(Form, self).visit(visitor)
 
     @property
@@ -163,3 +192,26 @@ class Visitor(object):
 
     def visit_node(self, node:ClojureObject):
         return node
+
+#######################################################################################################################
+
+def is_integer(form):
+    if isinstance(form, Value):
+        return type(form.value) is int
+    else:
+        return False
+
+def is_numeric(form):
+    if isinstance(form, Value):
+        return type(form.value) in [complex, float, int]
+    else:
+        return False
+
+def is_symbol(form, symbol:str=None):
+    if isinstance(form, Symbol):
+        return form.name == symbol if symbol is not None else True
+    else:
+        return False
+
+def is_vector(form):
+    return isinstance(form, Vector)
