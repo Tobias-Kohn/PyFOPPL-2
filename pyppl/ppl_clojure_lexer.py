@@ -10,18 +10,25 @@ from . import ppl_clojure_forms as clj
 from . import lexer
 from .lexer import CatCode, TokenType
 
+#######################################################################################################################
 
 class ClojureLexer(object):
+
     def __init__(self, text: str):
         self.text = text
         self.lexer = lexer.Lexer(text)
         self.source = lexer.BufferedIterator(self.lexer)
         self.lexer.catcodes['\n', ','] = CatCode.WHITESPACE
-        self.lexer.catcodes['!', '$', '%', '&', '*', '+', '-', '.', '/', ':', '<', '>', '=', '?'] = CatCode.ALPHA
+        self.lexer.catcodes['!', '$', '*', '+', '-', '.', '/', ':', '<', '>', '=', '?'] = CatCode.ALPHA
         self.lexer.catcodes[';'] = CatCode.LINE_COMMENT
         self.lexer.catcodes['#', '\'', '`', '~', '^', '@'] = CatCode.SYMBOL
+        self.lexer.catcodes['&'] = CatCode.SYMBOL
+        self.lexer.catcodes['%', ':'] = CatCode.PREFIX
         self.lexer.add_symbols('~@', '#\'')
         self.lexer.add_string_prefix('#')
+        self.lexer.add_constant('false', False)
+        self.lexer.add_constant('nil', None)
+        self.lexer.add_constant('true', True)
 
     def __iter__(self):
         return self
@@ -66,13 +73,18 @@ class ClojureLexer(object):
             elif token_type == TokenType.STRING:
                 return clj.Value(eval(value), lineno=lineno)
 
+            elif token_type == TokenType.VALUE:
+                return clj.Value(value, lineno=lineno)
+
             elif token_type == TokenType.SYMBOL:
 
                 if value == '#':
                     form = self.__next__()
                     if not isinstance(form, clj.Form):
                         raise SyntaxError("'#' requires a form to build a function (line {})".format(lineno))
-                    raise NotImplementedError("lambda function are not yet implemented")
+
+                    params = clj.Vector(_ParameterExtractor().extract_parameters(form))
+                    return clj.Form(['fn', params, form])
 
                 elif value == '@':
                     form = self.__next__()
@@ -92,3 +104,32 @@ class ClojureLexer(object):
                 raise SyntaxError("invalid token: '{}' (line {})".format(token_type, lineno))
 
         raise StopIteration
+
+#######################################################################################################################
+
+class _ParameterExtractor(clj.LeafVisitor):
+
+    def __iter__(self):
+        self.parameters = set()
+
+    def visit_symbol(self, node:clj.Symbol):
+        n = node.name
+        if n.startswith('%'):
+            if len(n) == 1:
+                self.parameters.add(n)
+            elif len(n) == 2 and '1' <= n[1] <= '9':
+                self.parameters.add(n)
+            else:
+                raise SyntaxError("invalid parameter: '{}'".format(n))
+
+    def extract_parameters(self, node):
+        self.parameters = set()
+        self.visit(node)
+        if '%' in self.parameters:
+            if len(self.parameters) == 1:
+                return ['%']
+            raise TypeError("cannot combine parameters '%' and '%1', '%2', ... in one function")
+        else:
+            count = max([ord(n[1])-ord('0') for n in self.parameters])
+            result = ['%' + chr(i + ord('1')) for i in range(count)]
+            return result

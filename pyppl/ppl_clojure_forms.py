@@ -47,6 +47,11 @@ class Form(ClojureObject):
         self.items = items
         if lineno is not None:
             self.lineno = lineno
+        self._special_names = {
+            '->':  'arrow',
+            '->>': 'double_arrow',
+            '.':   'dot'
+        }
         assert type(items) in [list, tuple]
         assert all([isinstance(item, ClojureObject) for item in items])
         assert lineno is None or type(lineno) is int
@@ -63,6 +68,8 @@ class Form(ClojureObject):
     def visit(self, visitor):
         name = self.name
         if name is not None:
+            if name in self._special_names:
+                name = '_sym_' + self._special_names[name]
             name = name.replace('-', '_').replace('.', '_').replace('/', '_')
             name = ''.join([n if n.islower() else "_" + n.lower() for n in name])
             method = getattr(visitor, 'visit_' + name, None)
@@ -100,6 +107,10 @@ class Form(ClojureObject):
     @property
     def tail(self):
         return Form(self.items[1:])
+
+    @property
+    def last(self):
+        return self.items[-1]
 
     @property
     def name(self):
@@ -193,7 +204,34 @@ class Visitor(object):
     def visit_node(self, node:ClojureObject):
         return node
 
+
+class LeafVisitor(Visitor):
+
+    def visit_symbol(self, node:Symbol):
+        self.visit_node(node)
+
+    def visit_value(self, node:Value):
+        self.visit_node(node)
+
+    def visit_form_form(self, node:Form):
+        for n in node.items:
+            n.visit(self)
+
+    def visit_symbol_form(self, node:Symbol):
+        self.visit_symbol(node)
+
+    def visit_value_form(self, node:Value):
+        self.visit_value(node)
+
+    def visit_vector_form(self, node:Vector):
+        for n in node.items:
+            n.visit(self)
+
+
 #######################################################################################################################
+
+def is_form(form):
+    return isinstance(form, Form)
 
 def is_integer(form):
     if isinstance(form, Value):
@@ -207,9 +245,24 @@ def is_numeric(form):
     else:
         return False
 
+def is_quoted(form):
+    return isinstance(form, Form) and len(form) == 2 and is_symbol(form.items[0], 'quote')
+
+def is_string(form):
+    if isinstance(form, Value):
+        return type(form.value) is str
+    else:
+        return False
+
 def is_symbol(form, symbol:str=None):
     if isinstance(form, Symbol):
         return form.name == symbol if symbol is not None else True
+    else:
+        return False
+
+def is_symbol_vector(form):
+    if isinstance(form, Vector):
+        return all([isinstance(item, Symbol) for item in form.items])
     else:
         return False
 

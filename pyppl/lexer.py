@@ -20,6 +20,7 @@ class TokenType(enum.Enum):
     LEFT_BRACKET = 7
     RIGHT_BRACKET = 8
     NEWLINE = 9
+    VALUE = 10
 
 
 #######################################################################################################################
@@ -37,7 +38,8 @@ class CatCode(enum.Enum):
     NEWLINE = 9
     STRING_DELIMITER = 10
     ESCAPE = 11
-    LINE_COMMENT = 12
+    PREFIX = 12
+    LINE_COMMENT = 13
 
 
 class CategoryCodes(object):
@@ -284,6 +286,7 @@ class Lexer(object):
         self.escapes = {
             '\\\n': None,
         }
+        self.constants = {}
         self.string_prefix = set()
         self.line_comment = None
         self.block_comment_start = None
@@ -355,6 +358,8 @@ class Lexer(object):
             name = self.read_name()
             if self.catcodes[source.current] == CatCode.STRING_DELIMITER and name in self.string_prefix:
                 return pos, TokenType.STRING, name + self.read_string()
+            elif name in self.constants:
+                return pos, TokenType.VALUE, self.constants[name]
             else:
                 tt = TokenType.KEYWORD if name in self.keywords else TokenType.SYMBOL
                 return pos, tt, name
@@ -370,6 +375,12 @@ class Lexer(object):
                 return pos, result[0], result[1]
             else:
                 return pos, TokenType.SYMBOL, result
+
+        elif cc == CatCode.PREFIX:
+            char = source.current
+            result = source.take_while(lambda c: c == char)
+            result += source.take_while(lambda c: self.catcodes[c] in [CatCode.ALPHA, CatCode.NUMERIC])
+            return pos, TokenType.SYMBOL, result
 
         else:
             raise SyntaxError("invalid character in input stream: {}/'{}'".format(
@@ -456,6 +467,10 @@ class Lexer(object):
             if s in self.ext_symbols:
                 return result + source.next()
         return result
+
+    def add_constant(self, name:str, value):
+        self.constants[name] = value
+        assert type(name) is str and name != ''
 
     def add_escape_sequence(self, key:str, target=None):
         self.escapes[key] = target

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 20. Feb 2018, Tobias Kohn
+# 21. Feb 2018, Tobias Kohn
 #
 from typing import Optional
 
@@ -309,8 +309,11 @@ class AstBinary(AstOperator):
         '**': ('pow',  lambda x, y: x ** y),
         '<<': ('shl',  lambda x, y: x << y),
         '>>': ('shr',  lambda x, y: x >> y),
-        '&':  ('and',  lambda x, y: x & y),
-        '|':  ('or',   lambda x, y: x | y),
+        '&':  ('bit_and', lambda x, y: x & y),
+        '|':  ('bit_or',  lambda x, y: x | y),
+        '^':  ('bit-xor', lambda x, y: x ^ y),
+        'and': ('and',    lambda x, y: x and y),
+        'or':  ('or',     lambda x, y: x or y),
     }
 
     def __init__(self, left:AstNode, op:str, right:AstNode):
@@ -321,7 +324,7 @@ class AstBinary(AstOperator):
         assert op in self.__binary_ops
 
     def __repr__(self):
-        return "({}{}{})".format(repr(self.left), self.op, repr(self.right))
+        return "({} {} {})".format(repr(self.left), self.op, repr(self.right))
 
     def get_visitor_names(self):
         name = 'visit_binary_' + self.op_name
@@ -469,27 +472,35 @@ class AstFor(AstControl):
 
 class AstFunction(AstNode):
 
-    def __init__(self, name:Optional[str], parameters:list, body:AstNode):
+    def __init__(self, name:Optional[str], parameters:list, body:AstNode, *, vararg:Optional[str]=None,
+                 doc_string:Optional[str]=None):
         if name is None:
             name = '__lambda__'
         self.name = name
         self.parameters = parameters
         self.body = body
+        self.vararg = vararg
+        self.doc_string = doc_string
         assert type(name) is str and name != ''
         assert type(parameters) is list and all([type(p) is str for p in parameters])
         assert isinstance(body, AstNode)
+        assert vararg is None or type(vararg) is str
+        assert doc_string is None or type(doc_string) is str
 
     def __repr__(self):
-        return "{}({}): ({})".format(self.name, ', '.join(self.parameters), repr(self.body))
+        params = self.parameters
+        if self.vararg is not None:
+            params.append('*' + self.vararg)
+        return "{}({}): ({})".format(self.name, ', '.join(params), repr(self.body))
 
 
 class AstIf(AstControl):
 
-    def __init__(self, test:AstCompare, if_node:AstNode, else_node:AstNode):
+    def __init__(self, test:AstNode, if_node:AstNode, else_node:Optional[AstNode]):
         self.test = test
         self.if_node = if_node
         self.else_node = else_node
-        assert isinstance(test, AstCompare)
+        assert isinstance(test, AstNode)
         assert isinstance(if_node, AstNode)
         assert else_node is None or isinstance(else_node, AstNode)
 
@@ -590,7 +601,7 @@ class AstSample(AstNode):
 
 class AstSlice(AstNode):
 
-    def __init__(self, base:AstNode, start:AstNode, stop:AstNode):
+    def __init__(self, base:AstNode, start:Optional[AstNode], stop:Optional[AstNode]):
         self.base = base
         self.start = start
         self.stop = stop
