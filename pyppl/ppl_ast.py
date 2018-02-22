@@ -191,7 +191,9 @@ class Visitor(object):
     """
 
     def visit(self, ast):
-        if isinstance(ast, AstNode):
+        if ast is None:
+            return None
+        elif isinstance(ast, AstNode):
             return ast.visit(self)
         elif hasattr(ast, '__iter__'):
             return [self.visit(item) for item in ast]
@@ -379,6 +381,21 @@ class AstCall(AstNode):
         for key in self.keyword_args:
             args.append('{}={}'.format(key, repr(self.keyword_args[key])))
         return "{}({})".format(repr(self.function), ', '.join(args))
+
+    def get_visitor_names(self):
+        name = self.function_name
+        if name is not None:
+            name = 'visit_call_' + name
+            return [name] + super(AstCall, self).get_visitor_names()
+        else:
+            return super(AstCall, self).get_visitor_names()
+
+    @property
+    def function_name(self):
+        if isinstance(self.function, AstSymbol):
+            return self.function.name
+        else:
+            return None
 
 
 class AstCompare(AstOperator):
@@ -775,7 +792,13 @@ def makeVector(items):
 
 #######################################################################################################################
 
-def is_int(node:AstNode):
+def is_boolean(node:AstNode):
+    if isinstance(node, AstValue):
+        return type(node.value) is bool
+    else:
+        return False
+
+def is_integer(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) is int
     else:
@@ -784,5 +807,11 @@ def is_int(node:AstNode):
 def is_number(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) in [complex, float, int]
+    else:
+        return False
+
+def is_string(node:AstNode):
+    if isinstance(node, AstValue):
+        return type(node.value) is str
     else:
         return False

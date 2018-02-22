@@ -297,7 +297,7 @@ class PythonParser(ast.NodeVisitor):
     def visit_UnaryOp(self, node:ast.UnaryOp):
         op = self.__ast_ops__[node.op.__class__]
         if isinstance(node.operand, ast.Num) and op in ['+', '-']:
-            n = -ast.Num.n if op == '-' else ast.Num.n
+            n = -node.operand.n if op == '-' else node.operand.n
             return _cl(AstValue(n), node)
         else:
             return _cl(AstUnary(op, self.visit(node.operand)), node)

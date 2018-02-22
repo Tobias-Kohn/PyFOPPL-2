@@ -6,7 +6,7 @@
 # 22. Feb 2018, Tobias Kohn
 # 22. Feb 2018, Tobias Kohn
 #
-from . import ppl_clojure_parser, ppl_foppl_parser, ppl_python_parser
+from . import ppl_foppl_parser, ppl_python_parser, ppl_optimizers
 
 def _detect_language(s:str):
     for char in s:
@@ -20,17 +20,22 @@ def _detect_language(s:str):
             return 'py'
 
         elif char > ' ':
-            break
+            return 'py'
 
     return None
 
-def parse(source:str):
+def parse(source:str, optimize:bool=True):
+    result = None
     if type(source) is str and str != '':
         lang = _detect_language(source)
         if lang == 'py':
-            return ppl_python_parser.parse(source)
+            result = ppl_python_parser.parse(source)
 
         elif lang == 'clj':
-            return ppl_foppl_parser.parse(source)
+            result = ppl_foppl_parser.parse(source)
 
-    return None
+    if optimize and result is not None:
+        opt = ppl_optimizers.Optimizer()
+        result = opt.visit(result)
+
+    return result
