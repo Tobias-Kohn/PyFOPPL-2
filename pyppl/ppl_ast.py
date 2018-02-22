@@ -363,6 +363,15 @@ class AstBody(AstNode):
         return "Body({})".format('; '.join([repr(item) for item in self.items]))
 
 
+class AstBreak(AstNode):
+
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return "break"
+
+
 class AstCall(AstNode):
 
     def __init__(self, function:AstNode, args:list, keyword_args:dict=None):
@@ -419,7 +428,7 @@ class AstCompare(AstOperator):
         self.left = left
         self.op = op
         self.right = right
-        self.second_op = op
+        self.second_op = second_op
         self.second_right = second_right
         assert isinstance(left, AstNode)
         assert isinstance(right, AstNode)

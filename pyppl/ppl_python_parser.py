@@ -103,6 +103,9 @@ class PythonParser(ast.NodeVisitor):
         op = self.__ast_ops__[node.op.__class__]
         return _cl(AstBinary(left, op, right), node)
 
+    def visit_Break(self, node:ast.Break):
+        return _cl(AstBreak(), node)
+
     def visit_Call(self, node:ast.Call):
         def _check_arg_arity(name, args, arg_count):
             if len(args) != arg_count:

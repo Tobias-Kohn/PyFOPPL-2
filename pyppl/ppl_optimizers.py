@@ -149,6 +149,55 @@ class Optimizer(ScopedVisitor):
         else:
             return node
 
+    def visit_for(self, node:AstFor):
+        source = self.visit(node.source)
+        body = self.visit(node.body)
+        return _cl(AstFor(node.target, source, body), node)
+
+    def visit_function(self, node:AstFunction):
+        body = self.visit(node.body)
+        return _cl(AstFunction(node.name, node.parameters, body,
+                               vararg=node.vararg, doc_string=node.doc_string), node)
+
+    def visit_if(self, node:AstIf):
+        test = self.visit(node.test)
+        if_node = self.visit(node.if_node)
+        else_node = self.visit(node.else_node)
+        return _cl(AstIf(test, if_node, else_node), node)
+
+    def visit_let(self, node:AstLet):
+        sources = [self.visit(item) for item in node.sources]
+        body = self.visit(node.body)
+        return _cl(AstLet(node.targets, sources, body), node)
+
+    def visit_list_for(self, node:AstListFor):
+        source = self.visit(node.source)
+        expr = self.visit(node.expr)
+        test = self.visit(node.test)
+        return _cl(AstListFor(node.target, source, expr, test), node)
+
+    def visit_observe(self, node:AstObserve):
+        dist = self.visit(node.dist)
+        value = self.visit(node.value)
+        if dist is node.dist and value is node.value:
+            return node
+        else:
+            return _cl(AstObserve(dist, value), node)
+
+    def visit_return(self, node:AstReturn):
+        value = self.visit(node.value)
+        if value is not node.value:
+            return _cl(AstReturn(value), node)
+        else:
+            return node
+
+    def visit_sample(self, node:AstSample):
+        dist = self.visit(node.dist)
+        if dist is not node.dist:
+            return _cl(AstSample(dist), node)
+        else:
+            return node
+
     def visit_slice(self, node:AstSlice):
         base = self.visit(node.base)
         start = self.visit(node.start)
@@ -159,15 +208,26 @@ class Optimizer(ScopedVisitor):
                 start = start.value if start is not None else None
                 stop = stop.value if stop is not None else None
                 if start is not None and stop is not None:
-                    return _cl(AstValueVector(base.items[start:stop]), node)
+                    return _cl(makeVector(base.items[start:stop]), node)
                 elif start is not None:
-                    return _cl(AstValueVector(base.items[start:]), node)
+                    return _cl(makeVector(base.items[start:]), node)
                 elif stop is not None:
-                    return _cl(AstValueVector(base.items[:stop]), node)
+                    return _cl(makeVector(base.items[:stop]), node)
                 else:
-                    return _cl(AstValueVector(base.items), node)
+                    return _cl(makeVector(base.items), node)
 
         return _cl(AstSlice(base, start, stop), node)
+
+    def visit_subscript(self, node:AstSubscript):
+        base = self.visit(node.base)
+        index = self.visit(node.index)
+        if is_integer(index):
+            if isinstance(base, AstValueVector):
+                return _cl(AstValue(base.items[index.value]), node)
+            elif isinstance(base, AstVector):
+                return _cl(base.items[index.value], node)
+
+        return _cl(AstSubscript(base, index), node)
 
     def visit_symbol(self, node:AstSymbol):
         return node
@@ -193,3 +253,10 @@ class Optimizer(ScopedVisitor):
     def visit_vector(self, node:AstVector):
         items = [item.visit(self) for item in node.items]
         return makeVector(items)
+
+    def visit_while(self, node:AstWhile):
+        test = self.visit(node.test)
+        body = self.visit(node.body)
+        if is_boolean(test) and not test.value:
+            return AstBody([])
+        return _cl(AstWhile(test, body), node)
