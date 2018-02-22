@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Feb 2018, Tobias Kohn
-# 21. Feb 2018, Tobias Kohn
+# 22. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_clojure_forms as clj
@@ -16,7 +16,18 @@ from .ppl_clojure_parser import ClojureParser
 class FopplParser(ClojureParser):
 
     def visit_loop(self, count, initial_data, function, *args):
-        pass
+        if not clj.is_integer(count):
+            raise SyntaxError("loop requires an integer value as first argument")
+        count = count.value
+        initial_data = initial_data.visit(self)
+        function = function.visit(self)
+        args = [arg.visit(self) for arg in args]
+        result = initial_data
+        i = 0
+        while i < count:
+            result = AstCall(function, [AstValue(i), result] + args)
+            i += 1
+        return result
 
 
 #######################################################################################################################

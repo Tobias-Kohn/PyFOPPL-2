@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 21. Feb 2018, Tobias Kohn
+# 22. Feb 2018, Tobias Kohn
 #
 from typing import Optional
 import inspect
@@ -70,6 +70,8 @@ class Form(ClojureObject):
         if name is not None:
             if name in self._special_names:
                 name = '_sym_' + self._special_names[name]
+            if name.endswith('?'):
+                name = 'is_' + name[:-1]
             name = name.replace('-', '_').replace('.', '_').replace('/', '_')
             name = ''.join([n if n.islower() else "_" + n.lower() for n in name])
             method = getattr(visitor, 'visit_' + name, None)

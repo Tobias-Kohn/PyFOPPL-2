@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 20. Feb 2018, Tobias Kohn
+# 22. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 import ast
@@ -234,7 +234,7 @@ class PythonParser(ast.NodeVisitor):
 
     def visit_Lambda(self, node: ast.Lambda):
         arg_names = [arg.arg for arg in node.args.args]
-        body = self.visit(node.body)
+        body = AstReturn(self.visit(node.body))
         return _cl(AstFunction(None, arg_names, body), node)
 
     def visit_List(self, node:ast.List):

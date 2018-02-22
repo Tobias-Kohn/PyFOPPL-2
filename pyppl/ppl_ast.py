@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 21. Feb 2018, Tobias Kohn
+# 22. Feb 2018, Tobias Kohn
 #
 from typing import Optional
 
@@ -616,6 +616,20 @@ class AstSlice(AstNode):
             repr(self.stop) if self.stop is not None else ''
         )
 
+    @property
+    def start_as_int(self):
+        if isinstance(self.start, AstValue) and type(self.start.value) is int:
+            return self.start.value
+        else:
+            return None
+
+    @property
+    def stop_as_int(self):
+        if isinstance(self.stop, AstValue) and type(self.stop.value) is int:
+            return self.stop.value
+        else:
+            return None
+
 
 class AstSubscript(AstNode):
 
@@ -631,6 +645,13 @@ class AstSubscript(AstNode):
 
     def __repr__(self):
         return "{}[{}]".format(repr(self.base), repr(self.index))
+
+    @property
+    def index_as_int(self):
+        if isinstance(self.index, AstValue):
+            return self.index.value if type(self.index.value) is int else None
+        else:
+            return None
 
 
 class AstSymbol(AstLeaf):
@@ -751,3 +772,17 @@ def makeVector(items):
         return AstValueVector(items)
     else:
         return AstVector(items)
+
+#######################################################################################################################
+
+def is_int(node:AstNode):
+    if isinstance(node, AstValue):
+        return type(node.value) is int
+    else:
+        return False
+
+def is_number(node:AstNode):
+    if isinstance(node, AstValue):
+        return type(node.value) in [complex, float, int]
+    else:
+        return False

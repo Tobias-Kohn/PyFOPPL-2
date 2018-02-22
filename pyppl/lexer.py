@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 21. Feb 2018, Tobias Kohn
+# 22. Feb 2018, Tobias Kohn
 #
 import enum
 
@@ -430,6 +430,10 @@ class Lexer(object):
             if source.current == '.' and is_digit(source.peek(1)):
                 result += source.next()
                 result += source.take_while(is_digit)
+
+            if source.current == '.' and self.catcodes[source.peek(1)] in [CatCode.WHITESPACE, CatCode.RIGHT_BRACKET,
+                                                                           CatCode.NEWLINE, CatCode.DELIMITER]:
+                result += source.next() + '0'
 
             if source.current in ['e', 'E'] and (is_digit(source.peek(1)) or
                                                      (source.peek(1) in ['+', '-'] and is_digit(source.peek(2)))):

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 21. Feb 2018, Tobias Kohn
+# 22. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_clojure_forms as clj
@@ -41,8 +41,13 @@ class ClojureParser(clj.Visitor):
         else:
             raise TypeError("the bindings must be a vector instead of '{}'".format(bindings))
 
-    def parse_body(self, body):
+    def parse_body(self, body, *, use_return:bool=False):
         body = [item.visit(self) for item in body]
+        if use_return:
+            if len(body) > 0:
+                body[-1] = AstReturn(body[-1])
+            else:
+                body.append(AstReturn(AstValue(None)))
         if len(body) == 1:
             return body[0]
         else:
@@ -60,7 +65,7 @@ class ClojureParser(clj.Visitor):
                 raise SyntaxError("invalid parameters: '{}'".format(parameters))
         else:
             raise TypeError("invalid function parameters: '{}'".format(parameters))
-        body = self.parse_body(body)
+        body = self.parse_body(body, use_return=True)
         return params, vararg, body
 
     def parse_target(self, target):
@@ -71,6 +76,11 @@ class ClojureParser(clj.Visitor):
         else:
             raise TypeError("invalid target in assignment: '{}'".format(target))
         return target
+
+    def visit_apply(self, function, *args):
+        function = function.visit(self)
+        args = [arg.visit(self) for arg in args]
+        return AstCall(function, args)
 
     def visit_cond(self, *clauses):
         if len(clauses) == 0:
@@ -108,7 +118,7 @@ class ClojureParser(clj.Visitor):
 
     def visit_defn(self, name, parameters, *body):
         if clj.is_symbol(name):
-            name = name.value
+            name = name.name
         else:
             raise TypeError("function name expected instead of '{}'".format(name))
         if clj.is_string(parameters) and len(body) > 1 and clj.is_symbol_vector(body[0]):
@@ -143,9 +153,7 @@ class ClojureParser(clj.Visitor):
         return result
 
     def visit_get(self, sequence, index):
-        sequence = sequence.visit(self)
-        index = index.visit(self)
-        return AstSubscript(sequence, index)
+        return self.visit_nth(sequence, index)
 
     def visit_if(self, test, body, *else_body):
         if len(else_body) > 1:
@@ -174,12 +182,13 @@ class ClojureParser(clj.Visitor):
         targets, sources = self.parse_bindings(bindings)
         return AstLet(targets, sources, self.parse_body(body))
 
-    def visit_map_(self, function, *args):
-        pass
-
     def visit_nth(self, sequence, index):
         sequence = sequence.visit(self)
         index = index.visit(self)
+        if isinstance(sequence, AstSlice) and sequence.stop is None and is_int(index):
+            start = sequence.start_as_int
+            if start is not None:
+                return AstSubscript(sequence.base, AstValue(start + index.value))
         return AstSubscript(sequence, index)
 
     def visit_observe(self, dist, value):
@@ -218,6 +227,10 @@ class ClojureParser(clj.Visitor):
 
     def visit_rest(self, sequence):
         sequence = sequence.visit(self)
+        if isinstance(sequence, AstSlice):
+            start = sequence.start_as_int
+            if start is not None:
+                return AstSlice(sequence.base, AstValue(start + 1), sequence.stop)
         return AstSlice(sequence, AstValue(1), None)
 
     def visit_sample(self, dist):
@@ -286,7 +299,7 @@ class ClojureParser(clj.Visitor):
                 if n == 'bit-and': n = '&'
                 if n == 'bit-or': n = '|'
                 if n == 'bit-xor': n = '^'
-                if len(args[0]) == 0:
+                if len(args) == 0:
                     return AstValue(0 if n in ['+', '-'] else 1)
                 result = args[0]
                 for arg in args[1:]:
@@ -295,6 +308,7 @@ class ClojureParser(clj.Visitor):
 
             elif n in ['<', '>', '<=', '>=', '=', '!=', '==', 'not=']:
                 if n == 'not=': n = '!='
+                if n == '=': n = '=='
                 if len(args) != 2:
                     raise TypeError("comparison requires exactly two arguments ({} given)".format(len(args)))
                 return AstCompare(args[0], n, args[1])
