@@ -4,9 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 22. Feb 2018, Tobias Kohn
+# 23. Feb 2018, Tobias Kohn
 #
 from typing import Optional
+import enum
 
 class AstNode(object):
     """
@@ -49,6 +50,23 @@ class AstNode(object):
                 return False
 
         return [item for item in self.get_fields() if is_valid(item)]
+
+    def get_ast_children(self):
+        """
+        Returns a flat list of all fields/children, which are `AstNode`-objects.
+
+        :return: A (possibly empty) list of `AstNode`-objects.
+        """
+        result = []
+        for name in self.get_fields():
+            field = getattr(self, name, None)
+            if isinstance(field, AstNode):
+                result.append(field)
+            elif hasattr(field, '__iter__'):
+                for item in field:
+                    if isinstance(item, AstNode):
+                        result.append(item)
+        return result
 
     def get_type(self):
         """
@@ -128,6 +146,8 @@ class AstNode(object):
                 self.visit_children(visitor)
             return visitor(self)
         elif len(methods) > 0:
+            if getattr(self, 'verbose', False) is True or getattr(visitor, 'verbose', False) is True:
+                print("calling {}".format(methods[0]))
             if len(env_methods) == 2:
                 env_methods[0](self)
                 try:
@@ -155,13 +175,11 @@ class AstNode(object):
         result = []
         for name in self.get_fields():
             item = getattr(self, name, None)
-            if isinstance(item, AstNode):
-                result.append(item.visit(visitor))
-            elif hasattr(item, '__iter__'):
-                result.append([node.visit(visitor) for node in item if isinstance(node, AstNode)])
+            if isinstance(item, AstNode) or hasattr(item, '__iter__'):
+                result.append(visitor.visit(item))
         return result
 
-    def visit_attribute(self, visitor, attr_name:str):
+    def visit_attribute(self, visitor, attr_name:str, default=None):
         """
         Sets an attribute on each node in the AST, based on the provided visitor (see `visit`-method above).
 
@@ -171,7 +189,7 @@ class AstNode(object):
         """
         assert type(attr_name) is str
         for name in self.get_fields():
-            item = getattr(self, name, None)
+            item = getattr(self, name, default)
             if isinstance(item, AstNode):
                 item.visit_attribute(visitor, attr_name)
             elif hasattr(item, '__iter__'):
@@ -195,8 +213,13 @@ class Visitor(object):
             return None
         elif isinstance(ast, AstNode):
             return ast.visit(self)
+        elif type(ast) is dict:
+            return { key: self.visit(ast[key]) for key in ast }
+        elif type(ast) is tuple:
+            return tuple([self.visit(item) for item in ast])
         elif hasattr(ast, '__iter__'):
-            return [self.visit(item) for item in ast]
+            return [(self.visit(item) if isinstance(item, AstNode) or type(item) in [tuple, list] else item)
+                    for item in ast]
         else:
             raise TypeError("cannot walk/visit an object of type '{}'".format(type(ast)))
 
@@ -246,6 +269,18 @@ class ScopedVisitor(Visitor):
     def define(self, name:str, value):
         self.scope.define(name, value)
 
+    def define_all(self, names:list, values:list, *, vararg:Optional[str]=None):
+        assert names is list
+        assert values is list
+        assert vararg is None or type(vararg) is str
+        for name, value in zip(names, values):
+            if isinstance(name, AstSymbol):
+                name = name.name
+            if type(name) is str:
+                self.define(name, value)
+        if vararg is not None:
+            self.define(str(vararg), makeVector(values[len(names):]) if len(values) > len(names) else [])
+
     def resolve(self, name:str):
         return self.scope.resolve(name)
 
@@ -273,6 +308,19 @@ class ScopedVisitor(Visitor):
     def leave_let(self, node):
         self.leave_scope()
 
+#######################################################################################################################
+
+class AttributeVisitor(ScopedVisitor):
+
+    def set_attributes(self, dest: AstNode, children: list):
+        pass
+
+    def visit_node(self, node: AstNode):
+        children = node.get_ast_children()
+        for item in children:
+            self.visit(item)
+        return self.set_attributes(node, children)
+
 
 #######################################################################################################################
 
@@ -284,6 +332,14 @@ class AstLeaf(AstNode):
 
 class AstOperator(AstNode):
     pass
+
+#######################################################################################################################
+
+class BodyContext(enum.Enum):
+
+    GLOBAL = 0
+    FUNCTION = 1
+    CONTROL = 2
 
 #######################################################################################################################
 
@@ -343,10 +399,11 @@ class AstBinary(AstOperator):
 
 class AstBody(AstNode):
 
-    def __init__(self, items:list):
+    def __init__(self, items:list, context:BodyContext=None):
         if items is None:
             items = []
         self.items = items
+        self.context = context
         # flatten nested bodies:
         if any(isinstance(item, AstBody) for item in items):
             new_items = []
@@ -471,14 +528,18 @@ class AstCompare(AstOperator):
 
 class AstDef(AstNode):
 
-    def __init__(self, name, value:AstNode):
+    def __init__(self, name, value:AstNode, global_context:bool=True):
         self.name = name
         self.value = value
+        self.global_context = global_context
         assert type(name) is str or (type(name) is tuple and all(type(item) is str for item in name))
         assert isinstance(value, AstNode)
+        assert type(global_context) is bool
 
     def __repr__(self):
         name = "({})".format(', '.join(self.name)) if type(self.name) is tuple else self.name
+        if self.global_context:
+            name = "def " + name
         return "{} := {}".format(name, repr(self.value))
 
 
@@ -617,6 +678,7 @@ class AstReturn(AstNode):
 
 
 class AstSample(AstNode):
+
     def __init__(self, dist: AstNode):
         self.dist = dist
         assert isinstance(dist, AstNode)
@@ -824,3 +886,6 @@ def is_string(node:AstNode):
         return type(node.value) is str
     else:
         return False
+
+def is_symbol(node:AstNode):
+    return isinstance(node, AstSymbol)

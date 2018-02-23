@@ -4,13 +4,27 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 22. Feb 2018, Tobias Kohn
+# 23. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 import ast
 
 
 _cl = ast.copy_location
+
+
+class _FunctionContext(object):
+
+    def __init__(self, prev):
+        self.prev = prev
+        self.global_names = set()
+
+    def add_global(self, name:str):
+        self.global_names.add(name)
+
+    def is_global(self, name:str):
+        return name in self.global_names
+
 
 class PythonParser(ast.NodeVisitor):
 
@@ -43,6 +57,27 @@ class PythonParser(ast.NodeVisitor):
         ast.NotIn:  'not in',
     }
 
+    def __init__(self):
+        self.function_context = None  # type:_FunctionContext
+
+    def _enter_function(self):
+        self.function_context = _FunctionContext(self.function_context)
+
+    def _leave_function(self):
+        self.function_context = self.function_context.prev
+
+    def _add_global_name(self, name:str):
+        result = self.function_context is not None
+        if result:
+            self.function_context.add_global(name)
+        return result
+
+    def _is_global_name(self, name:str):
+        if self.function_context is None:
+            return True
+        else:
+            return self.function_context.is_global(name)
+
     def _visit_body(self, body:list, require_return:bool=False):
         if len(body) == 1 and isinstance(body[0], ast.Pass):
             if require_return:
@@ -64,6 +99,11 @@ class PythonParser(ast.NodeVisitor):
             elif not isinstance(result[-1], AstReturn):
                 result.append(AstReturn(AstValue(None)))
 
+        for i in range(len(result)):
+            if isinstance(result[i], AstReturn) or isinstance(result[i], AstBreak):
+                result = result[:i+1]
+                break
+
         if len(result) == 1:
             return result[0]
         else:
@@ -77,7 +117,7 @@ class PythonParser(ast.NodeVisitor):
         if len(node.targets) == 1:
             target = node.targets[0]
             if isinstance(target, ast.Name):
-                return _cl(AstDef(target.id, source), node)
+                return _cl(AstDef(target.id, source, global_context=self._is_global_name(target.id)), node)
 
             elif isinstance(target, ast.Tuple) and all([isinstance(t, ast.Name) for t in target.elts]):
                 return _cl(AstDef(tuple(t.id for t in target.elts), source), node)
@@ -85,10 +125,10 @@ class PythonParser(ast.NodeVisitor):
         elif len(node.targets) > 1 and all(isinstance(target, ast.Name) for target in node.targets):
             result = []
             base = node.targets[-1].id
-            result.append(_cl(AstDef(base, source), node))
+            result.append(_cl(AstDef(base, source, global_context=self._is_global_name(base)), node))
             base_name = AstSymbol(base)
             for target in node.targets[:-1]:
-                result.append(AstDef(target.id, base_name))
+                result.append(AstDef(target.id, base_name, global_context=self._is_global_name(target.id)))
             return AstBody(result)
 
         raise NotImplementedError("cannot compile assignment '{}'".format(ast.dump(node)))
@@ -96,6 +136,14 @@ class PythonParser(ast.NodeVisitor):
     def visit_Attribute(self, node:ast.Attribute):
         base = self.visit(node.value)
         return _cl(AstAttribute(base, node.attr), node)
+
+    def visit_AugAssign(self, node:ast.AugAssign):
+        if isinstance(node.target, ast.Name):
+            target = node.target.id
+            source = self.visit(node.value)
+            op = self.__ast_ops__[node.op.__class__]
+            return _cl(AstDef(target, AstBinary(AstSymbol(target), op, source)), node)
+        raise NotImplementedError("cannot assign to '{}'".format(ast.dump(node.target)))
 
     def visit_BinOp(self, node:ast.BinOp):
         left = self.visit(node.left)
@@ -191,8 +239,17 @@ class PythonParser(ast.NodeVisitor):
             raise NotImplementedError("cannot compile decorators: '{}'".format(ast.dump(node)))
         name = node.name
         arg_names = [arg.arg for arg in node.args.args]
-        body = self._visit_body(node.body, require_return=True)
-        return _cl(AstFunction(name, arg_names, body), node)
+        self._enter_function()
+        try:
+            body = self._visit_body(node.body, require_return=True)
+        finally:
+            self._leave_function()
+        return AstDef(name, _cl(AstFunction(name, arg_names, body), node), global_context=self.function_context is None)
+
+    def visit_Global(self, node:ast.Global):
+        for name in node.names:
+            if not self._add_global_name(name):
+                raise SyntaxError("global outside function")
 
     def visit_If(self, node:ast.If):
         test = self.visit(node.test)
@@ -277,6 +334,8 @@ class PythonParser(ast.NodeVisitor):
         return _cl(AstValue(node.n), node)
 
     def visit_Return(self, node:ast.Return):
+        if self.function_context is None:
+            raise SyntaxError("return outside function")
         return _cl(AstReturn(self.visit(node.value)), node)
 
     def visit_Str(self, node:ast.Str):

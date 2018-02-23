@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 22. Feb 2018, Tobias Kohn
+# 23. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from ast import copy_location as _cl
@@ -19,6 +19,10 @@ class Optimizer(ScopedVisitor):
             return _cl(AstAttribute(base, node.attr), node)
 
     def visit_binary(self, node:AstBinary):
+        if is_symbol(node.left) and is_symbol(node.right) and \
+                        node.op in ['-', '/', '//'] and node.left.name == node.right.name:
+            return AstValue(0 if node.op == '-' else 1)
+
         left = node.left.visit(self)
         right = node.right.visit(self)
         op = node.op
@@ -103,6 +107,10 @@ class Optimizer(ScopedVisitor):
                 elif op in ['+', '-'] and left.op in ['+', '-']:
                     return _cl(AstBinary(left.left, left.op, AstValue(l_value - value)).visit(self), node)
 
+            if op in ['<<', '>>'] and type(value) is int:
+                base = 2 if op == '<<' else 0.5
+                return _cl(AstBinary(left, '*', AstValue(base ** value)), node)
+
         elif is_boolean(left) and is_boolean(right):
             return _cl(AstValue(node.op_function(left.value, right.value)), node)
 
@@ -131,9 +139,21 @@ class Optimizer(ScopedVisitor):
         return _cl(AstBody(items), node)
 
     def visit_call(self, node:AstCall):
+        # TODO: make sure we do not get rid of side-effects
+        # TODO: what about the 'return'-statement...?
         function = self.visit(node.function)
         args = [self.visit(arg) for arg in node.args]
         keywords = { key:self.visit(node.keyword_args[key]) for key in node.keyword_args }
+        if isinstance(function, AstFunction):
+            self.enter_scope(function.name)
+            try:
+                self.define_all(function.parameters, args, vararg=function.vararg)
+                result = self.visit(function.body)
+            finally:
+                self.leave_scope()
+            if result is not None:
+                return result
+
         return _cl(AstCall(function, args, keywords), node)
 
     def visit_compare(self, node:AstCompare):
@@ -230,7 +250,11 @@ class Optimizer(ScopedVisitor):
         return _cl(AstSubscript(base, index), node)
 
     def visit_symbol(self, node:AstSymbol):
-        return node
+        value = self.resolve(node.name)
+        if value is not None:
+            return value
+        else:
+            return node
 
     def visit_unary(self, node:AstUnary):
         item = node.item.visit(self)

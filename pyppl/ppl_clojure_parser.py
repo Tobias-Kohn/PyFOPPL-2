@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 22. Feb 2018, Tobias Kohn
+# 23. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_clojure_forms as clj
@@ -114,7 +114,7 @@ class ClojureParser(clj.Visitor):
     def visit_def(self, target, source):
         target = self.parse_target(target)
         source = source.visit(self)
-        return AstDef(target, source)
+        return AstDef(target, source, global_context=True)
 
     def visit_defn(self, name, parameters, *body):
         if clj.is_symbol(name):
@@ -127,7 +127,7 @@ class ClojureParser(clj.Visitor):
         else:
             doc_string = None
         params, vararg, body = self.parse_function(parameters, body)
-        return AstDef(name, AstFunction(name, params, body, vararg=vararg, doc_string=doc_string))
+        return AstDef(name, AstFunction(name, params, body, vararg=vararg, doc_string=doc_string), global_context=True)
 
     def visit_do(self, body):
         return self.parse_body(body)
@@ -239,6 +239,11 @@ class ClojureParser(clj.Visitor):
     def visit_second(self, sequence):
         sequence = sequence.visit(self)
         return AstSubscript(sequence, AstValue(1))
+
+    def visit_setv(self, target, source):
+        target = self.parse_target(target)
+        source = source.visit(self)
+        return AstDef(target, source)
 
     def visit_sym_arrow(self, init_arg, *functions):
         result = init_arg
