@@ -14,6 +14,15 @@ from .ppl_clojure_lexer import ClojureLexer
 
 class ClojureParser(clj.Visitor):
 
+    __core_functions__ = {
+        'concat',
+        'conj',
+        'cons',
+        'into',
+        'map',
+        'reduce',
+    }
+
     def parse_alias(self, alias):
         if clj.is_quoted(alias):
             alias = alias.last
@@ -89,7 +98,7 @@ class ClojureParser(clj.Visitor):
         elif len(seqs) == 1:
             return seqs[0]
         else:
-            return AstCall(AstSymbol('concat'), seqs)
+            return AstCall(AstSymbol('clojure.core.concat'), seqs)
 
     def visit_cond(self, *clauses):
         if len(clauses) == 0:
@@ -109,13 +118,13 @@ class ClojureParser(clj.Visitor):
         elements = [e.visit(self) for e in elements]
         result = sequence
         for element in elements:
-            result = AstCall(AstSymbol('conj'), [result, element])
+            result = AstCall(AstSymbol('clojure.core.conj'), [result, element])
         return result
 
     def visit_cons(self, element, sequence):
         element = element.visit(self)
         sequence = sequence.visit(self)
-        return AstCall(AstSymbol('cons'), [element, sequence])
+        return AstCall(AstSymbol('clojure.core.cons'), [element, sequence])
 
     def visit_dec(self, number):
         return AstBinary(number.visit(self), '-', AstValue(1))
@@ -373,6 +382,9 @@ class ClojureParser(clj.Visitor):
 
             elif n.startswith(':') and len(args) == 1:
                 return AstSubscript(args[0], AstValue(n[1:]))
+
+            elif n in self.__core_functions__:
+                return AstCall(AstSymbol('clojure.core.' + n), args)
 
         return AstCall(function, args)
 

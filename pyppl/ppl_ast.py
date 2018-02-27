@@ -843,6 +843,29 @@ class AstValueVector(AstLeaf):
     def __repr__(self):
         return repr(self.items)
 
+    def conj(self, element):
+        if type(element) in [bool, complex, float, int, str]:
+            return AstValueVector(self.items + [element])
+        elif isinstance(element, AstValue):
+            return AstValueVector(self.items + [element.value])
+        elif isinstance(element, AstNode):
+            return AstVector([AstValue(item) for item in self.items] + [element])
+        else:
+            return AstCall(AstSymbol('conj'), [self, element])
+
+    def cons(self, element):
+        if type(element) in [bool, complex, float, int, str]:
+            return AstValueVector([element] + self.items)
+        elif isinstance(element, AstValue):
+            return AstValueVector([element.value] + self.items)
+        elif isinstance(element, AstNode):
+            return AstVector([AstValue(element)] + [AstValue(item) for item in self.items])
+        else:
+            return AstCall(AstSymbol('cons'), [element, self])
+
+    def to_vector(self):
+        return AstVector([AstValue(item) for item in self.items])
+
 
 class AstVector(AstNode):
 
@@ -861,6 +884,22 @@ class AstVector(AstNode):
 
     def __repr__(self):
         return "[{}]".format(', '.join([repr(item) for item in self.items]))
+
+    def conj(self, element):
+        if isinstance(element, AstNode):
+            return AstVector(self.items + [element])
+        elif type(element) in [bool, complex, float, int, str]:
+            return AstVector(self.items + [AstValue(element)])
+        else:
+            return AstCall(AstSymbol('conj'), [self, element])
+
+    def cons(self, element):
+        if isinstance(element, AstNode):
+            return AstVector([element] + self.items)
+        elif type(element) in [bool, complex, float, int, str]:
+            return AstVector([AstValue(element)] + self.items)
+        else:
+            return AstCall(AstSymbol('cons'), [element, self])
 
 
 class AstWhile(AstControl):
@@ -913,3 +952,6 @@ def is_string(node:AstNode):
 
 def is_symbol(node:AstNode):
     return isinstance(node, AstSymbol)
+
+def is_vector(node:AstNode):
+    return isinstance(node, AstValueVector) or isinstance(node, AstVector)

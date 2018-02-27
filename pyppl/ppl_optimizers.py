@@ -157,7 +157,48 @@ class Optimizer(ScopedVisitor):
             if result is not None:
                 return result
 
+        elif isinstance(function, AstDict):
+            if len(args) != 1 or len(keywords) != 0:
+                raise TypeError("dict access requires exactly one argument ({} given)".format(len(args) + len(keywords)))
+            return self.visit(_cl(AstSubscript(function, args[0]), node))
+
         return _cl(AstCall(function, args, keywords), node)
+
+    def visit_call_clojure_core_concat(self, node:AstCall):
+        import itertools
+        if len(node.keyword_args) == 0:
+            args = [self.visit(arg) for arg in node.args]
+            if all([is_string(item) for item in args]):
+                return _cl(AstValue(''.join([item.value for item in args])), node)
+
+            elif all([isinstance(item, AstValueVector) for item in args]):
+                return _cl(AstValue(list(itertools.chain([item.value for item in args]))), node)
+
+            elif all([is_vector(item) for item in args]):
+                args = [item if isinstance(item, AstVector) else item.to_vector() for item in args]
+                return _cl(AstValue(list(itertools.chain([item.value for item in args]))), node)
+
+        return self.visit_call(node)
+
+    def visit_call_clojure_core_conj(self, node:AstCall):
+        if len(node.keyword_args) == 0:
+            args = [self.visit(arg) for arg in node.args]
+            if len(args) > 1 and is_vector(args[0]):
+                sequence = args[0]
+                for arg in reversed(args[1:]):
+                    sequence = sequence.conj(arg)
+                return sequence
+        return self.visit_call(node)
+
+    def visit_call_clojure_core_cons(self, node:AstCall):
+        if len(node.keyword_args) == 0:
+            args = [self.visit(arg) for arg in node.args]
+            if len(args) > 1 and is_vector(args[-1]):
+                sequence = args[-1]
+                for arg in reversed(args[:-1]):
+                    sequence = sequence.cons(arg)
+                return sequence
+        return self.visit_call(node)
 
     def visit_compare(self, node:AstCompare):
         left = self.visit(node.left)
@@ -270,6 +311,10 @@ class Optimizer(ScopedVisitor):
                 return _cl(AstValue(base.items[index.value]), node)
             elif isinstance(base, AstVector):
                 return _cl(base.items[index.value], node)
+
+        if isinstance(base, AstDict) and isinstance(index, AstValue):
+            default = self.visit(node.default)
+            return base.items.get(index.value, default)
 
         return _cl(AstSubscript(base, index), node)
 
