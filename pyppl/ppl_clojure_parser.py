@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 23. Feb 2018, Tobias Kohn
+# 27. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_clojure_forms as clj
@@ -132,6 +132,13 @@ class ClojureParser(clj.Visitor):
     def visit_do(self, body):
         return self.parse_body(body)
 
+    def visit_doseq(self, bindings, *body):
+        targets, sources = self.parse_bindings(bindings)
+        result = self.parse_body(body)
+        for target, source in zip(reversed(targets), reversed(sources)):
+            result = AstFor(target, source, result)
+        return result
+
     def visit_drop(self, count, sequence):
         count = count.visit(self)
         sequence = sequence.visit(self)
@@ -185,7 +192,7 @@ class ClojureParser(clj.Visitor):
     def visit_nth(self, sequence, index):
         sequence = sequence.visit(self)
         index = index.visit(self)
-        if isinstance(sequence, AstSlice) and sequence.stop is None and is_int(index):
+        if isinstance(sequence, AstSlice) and sequence.stop is None and is_integer(index):
             start = sequence.start_as_int
             if start is not None:
                 return AstSubscript(sequence.base, AstValue(start + index.value))
@@ -244,6 +251,14 @@ class ClojureParser(clj.Visitor):
         target = self.parse_target(target)
         source = source.visit(self)
         return AstDef(target, source)
+
+    def visit_subvec(self, sequence, start, *stop):
+        if len(stop) > 1:
+            raise TypeError("subvec() takes at most three arguments ({} given)".format(len(stop) + 2))
+        sequence = sequence.visit(self)
+        start = start.visit(self)
+        stop = stop[0].visit(self) if len(stop) > 0 else None
+        return AstSlice(sequence, start, stop)
 
     def visit_sym_arrow(self, init_arg, *functions):
         result = init_arg
