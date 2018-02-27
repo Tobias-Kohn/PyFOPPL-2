@@ -168,8 +168,21 @@ class ClojureParser(clj.Visitor):
             result = AstListFor(target, source, result)
         return result
 
-    def visit_get(self, sequence, index):
-        return self.visit_nth(sequence, index)
+    def visit_get(self, sequence, index, *defaults):
+        sequence = sequence.visit(self)
+        index = index.visit(self)
+        if len(defaults) == 0:
+            default = None
+        elif len(defaults) == 1:
+            default = defaults[0]
+        else:
+            raise TypeError("too many arguments for 'get' ({} given)".format(len(defaults) + 2))
+
+        if isinstance(sequence, AstSlice) and sequence.stop is None and is_integer(index) and default is None:
+            start = sequence.start_as_int
+            if start is not None:
+                return AstSubscript(sequence.base, AstValue(start + index.value))
+        return AstSubscript(sequence, index, default)
 
     def visit_if(self, test, body, *else_body):
         if len(else_body) > 1:
@@ -197,10 +210,6 @@ class ClojureParser(clj.Visitor):
     def visit_let(self, bindings, *body):
         targets, sources = self.parse_bindings(bindings)
         return AstLet(targets, sources, self.parse_body(body))
-
-    def visit_list(self, *items):
-        items = [item.visit(self) for item in items]
-        return makeVector(items)
 
     def visit_nth(self, sequence, index):
         sequence = sequence.visit(self)
@@ -357,7 +366,28 @@ class ClojureParser(clj.Visitor):
                         raise TypeError("attribute access: fields must be names instead of '{}'".format(arg))
                 return result
 
+            elif n == 'contains?':
+                if len(args) != 2:
+                    raise TypeError("comparison requires exactly two arguments ({} given)".format(len(args)))
+                return AstCompare(args[1], 'in', args[0])
+
+            elif n.startswith(':') and len(args) == 1:
+                return AstSubscript(args[0], AstValue(n[1:]))
+
         return AstCall(function, args)
+
+    def visit_map_form(self, node:clj.Map):
+        keys = [key.visit(self) for key in node.items[0::2]]
+        values = [value.visit(self) for value in node.items[1::2]]
+        items = {}
+        for key, value in zip(keys, values):
+            if isinstance(key, AstSymbol) and key.startswith(':'):
+                items[key.name[1:]] = value
+            elif isinstance(key, AstValue):
+                items[key.value] = value
+            else:
+                raise SyntaxError("invalid key for map: '{}'".format(key))
+        return AstDict(items)
 
     def visit_symbol_form(self, node:clj.Symbol):
         return AstSymbol(node.name)

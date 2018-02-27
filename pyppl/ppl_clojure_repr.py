@@ -70,6 +70,10 @@ class ClojureRepr(Visitor):
         else:
             return "(def {}\n  {})".format(name, value)
 
+    def visit_dict(self, node:AstDict):
+        items = ["{} {}".format(key, node.items[key]) for key in node.items]
+        return "{" + ', '.join(items) + "}"
+
     def visit_for(self, node:AstFor):
         source = self.visit(node.source)
         body = self.visit_indent(node.body)

@@ -182,6 +182,10 @@ class Optimizer(ScopedVisitor):
         else:
             return node
 
+    def visit_dict(self, node:AstDict):
+        items = { key: self.visit(node.items[key]) for key in node.items }
+        return _cl(AstDict(items), node)
+
     def visit_for(self, node:AstFor):
         source = self.visit(node.source)
         body = self.visit(node.body)

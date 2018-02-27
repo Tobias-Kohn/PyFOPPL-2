@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 21. Feb 2018, Tobias Kohn
+# 27. Feb 2018, Tobias Kohn
 #
 from . import ppl_clojure_forms as clj
 from . import lexer
@@ -19,7 +19,7 @@ class ClojureLexer(object):
         self.lexer = lexer.Lexer(text)
         self.source = lexer.BufferedIterator(self.lexer)
         self.lexer.catcodes['\n', ','] = CatCode.WHITESPACE
-        self.lexer.catcodes['!', '$', '*', '+', '-', '.', '/', ':', '<', '>', '=', '?'] = CatCode.ALPHA
+        self.lexer.catcodes['!', '$', '*', '+', '-', '.', '/', '<', '>', '=', '?'] = CatCode.ALPHA
         self.lexer.catcodes[';'] = CatCode.LINE_COMMENT
         self.lexer.catcodes['#', '\'', '`', '~', '^', '@'] = CatCode.SYMBOL
         self.lexer.catcodes['&'] = CatCode.SYMBOL
@@ -60,7 +60,9 @@ class ClojureLexer(object):
                         return clj.Vector(result, lineno=lineno)
 
                     elif left == '{' and right == '}':
-                        raise NotImplementedError("{} not implemented")
+                        if len(result) % 2 != 0:
+                            raise SyntaxError("map requires an even number of elements ({} given)".format(len(result)))
+                        return clj.Map(result, lineno=lineno)
 
                     else:
                         raise SyntaxError("mismatched parentheses: '{}' amd '{}' (line {})".format(

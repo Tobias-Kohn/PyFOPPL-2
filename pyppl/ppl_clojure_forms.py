@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 22. Feb 2018, Tobias Kohn
+# 27. Feb 2018, Tobias Kohn
 #
 from typing import Optional
 import inspect
@@ -134,6 +134,20 @@ class Form(ClojureObject):
         return len(self.items)
 
 
+class Map(ClojureObject):
+
+    def __init__(self, items:list, lineno:Optional[int]=None):
+        self.items = items
+        assert type(items) is list
+        assert all([isinstance(item, ClojureObject) for item in items])
+        assert len(self.items) % 2 == 0
+        assert lineno is None or type(lineno) is int
+
+    def __repr__(self):
+        return "{" + ' '.join([repr(item) for item in self.items]) + "}"
+
+
+
 class Symbol(ClojureObject):
 
     def __init__(self, name:str, lineno:Optional[int]=None):
@@ -219,6 +233,10 @@ class LeafVisitor(Visitor):
         for n in node.items:
             n.visit(self)
 
+    def visit_map_form(self, node:Map):
+        for n in node.items:
+            n.visit(self)
+
     def visit_symbol_form(self, node:Symbol):
         self.visit_symbol(node)
 
@@ -240,6 +258,9 @@ def is_integer(form):
         return type(form.value) is int
     else:
         return False
+
+def is_map(form):
+    return isinstance(form, Map)
 
 def is_numeric(form):
     if isinstance(form, Value):

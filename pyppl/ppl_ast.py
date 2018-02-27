@@ -546,6 +546,19 @@ class AstDef(AstNode):
         return "{} := {}".format(name, repr(self.value))
 
 
+class AstDict(AstNode):
+
+    def __init__(self, items:dict):
+        self.items = items
+        assert type(items) is dict
+        assert all([type(key) in [bool, complex, float, int, str] and isinstance(self.items[key], AstNode)
+                    for key in self.items])
+
+    def __repr__(self):
+        items = ["{}: {}".format(key, repr(self.items[key])) for key in self.items]
+        return "{" + (', '.join(items)) + "}"
+
+
 class AstFor(AstControl):
 
     def __init__(self, target, source:AstNode, body:AstNode):
@@ -724,18 +737,23 @@ class AstSlice(AstNode):
 
 class AstSubscript(AstNode):
 
-    def __init__(self, base:AstNode, index:AstNode):
+    def __init__(self, base:AstNode, index:AstNode, default:Optional[AstNode]=None):
         self.base = base
         self.index = index
+        self.default = default
         if isinstance(index, AstValue):
             self.index_n = int(index.value) if type(index.value) in [int, bool] else None
         else:
             self.index_n = None
         assert isinstance(base, AstNode)
         assert isinstance(index, AstNode)
+        assert default is None or isinstance(default, AstNode)
 
     def __repr__(self):
-        return "{}[{}]".format(repr(self.base), repr(self.index))
+        if self.default is not None:
+            return "{}.get({}, {})".format(repr(self.base), repr(self.index), repr(self.default))
+        else:
+            return "{}[{}]".format(repr(self.base), repr(self.index))
 
     @property
     def index_as_int(self):
@@ -755,6 +773,9 @@ class AstSymbol(AstLeaf):
 
     def __repr__(self):
         return self.name
+
+    def startswith(self, prefix:str):
+        return self.name.startswith(prefix)
 
 
 class AstUnary(AstOperator):

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 23. Feb 2018, Tobias Kohn
+# 27. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 import ast
@@ -192,8 +192,11 @@ class PythonParser(ast.NodeVisitor):
                 result = AstCall(AstSymbol(name), args, keywords)
             return _cl(result, node)
 
-        #elif isinstance(node.func, ast.Lambda):
-        #    pass
+        elif isinstance(node.func, ast.Lambda):
+            func = self.visit_Lambda(node.func)
+            args = [self.visit(arg) for arg in node.args]
+            keywords = { kw.arg: self.visit(kw.value) for kw in node.keywords }
+            return _cl(AstCall(func, args, keywords), node)
 
         else:
             raise NotImplementedError("a function call needs a function name, not '{}'".format(ast.dump(node.func)))
@@ -210,9 +213,23 @@ class PythonParser(ast.NodeVisitor):
             op2 = self.__ast_ops__[node.ops[1].__class__]
             if (op1 in ['<', '<='] and op2 in ['<', '<=']) or \
                (op1 in ['>', '>='] and op2 in ['>', '>=']):
-                pass
+                left = self.visit(node.left)
+                middle = self.visit(node.comparators[0])
+                right = self.visit(node.comparators[1])
+                return _cl(AstCompare(left, op1, middle, op2, right), node)
 
         raise NotImplementedError("cannot compile compare '{}'".format(ast.dump(node)))
+
+    def visit_Dict(self, node:ast.Dict):
+        keys = [self.visit(key) for key in node.keys]
+        values = [self.visit(value) for value in node.values]
+        result = {}
+        for key, value in zip(keys, values):
+            if isinstance(key, AstValue):
+                result[key.value] = value
+            else:
+                raise SyntaxError("key to dict must be primitive type, not '{}'".format(key))
+        return AstDict(result)
 
     def visit_Expr(self, node:ast.Expr):
         return self.visit(node.value)

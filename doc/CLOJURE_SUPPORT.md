@@ -11,12 +11,13 @@ For a LISP-compiler in Python, consider the
 Some limitations of the current implementation:
 
 - Macros are not supported.
-- Lists and vectors are both translated to Python lists.
+- Only vectors are supported, but not lists.
 
 ## Special Forms and Core Functions
 
 Other forms encountered are considered to be simple function calls.
 
+`(. x y)`  
 `(+ x & y)`  
 `(- x y)`  
 `(-> init & functions)`  
@@ -28,12 +29,17 @@ Other forms encountered are considered to be simple function calls.
 `(<= x y)`  
 `(> x y)`  
 `(>= x y)`  
+`(!= x y)`  
 `(and x y)`  
 `(apply f & args)`  
+`(bit-and x y)`  
+`(bit-or x y)`  
+`(bit-xor x y)`  
 `(concat x y)`  
 `(cond & clauses)`  
 `(conj coll x)`  
 `(cons x seq)`  
+`(contains? map key)`  
 `(dec x)`
   _Translates to: `(- x 1)`_  
 `(def name value)`  
@@ -51,11 +57,10 @@ Other forms encountered are considered to be simple function calls.
   _Translates to: `(+ x 1)`_  
 `(last coll)`  
 `(let [& bindings] body)`  
-`(list & elems)`
-  _Same as `(vector ...)`, i.e. returns a vector._  
 `(nth coll x)`
   _Same as `(get coll x)`._  
 `(not x)`  
+`(not= x y)` _Same as `!=`._  
 `(or x y)`  
 `(repeat n value)`
 `(repeatedly n function)`  
@@ -63,7 +68,7 @@ Other forms encountered are considered to be simple function calls.
 `(rest coll)`  
 `(second coll)`  
 `(setv name value)`
- _Variable assignment Python-style; copied from 'Hy'._  
+ _Variable assignment, Python-style; copied from 'Hy'._  
 `(subvec coll start stop)`  
 `(take n coll)`  
 `(use 'name)`  
