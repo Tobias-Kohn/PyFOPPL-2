@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 23. Feb 2018, Tobias Kohn
+# 27. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from ast import copy_location as _cl
@@ -136,6 +136,9 @@ class Optimizer(ScopedVisitor):
 
     def visit_body(self, node:AstBody):
         items = [item.visit(self) for item in node.items]
+        items = [item for item in items if item is not None]
+        if len(items) == 1:
+            return items[0]
         return _cl(AstBody(items), node)
 
     def visit_call(self, node:AstCall):
@@ -160,6 +163,16 @@ class Optimizer(ScopedVisitor):
         left = self.visit(node.left)
         right = self.visit(node.right)
         second_right = self.visit(node.second_right)
+
+        if is_number(left) and is_number(right):
+            result = node.op_function(left.value, right.value)
+            if second_right is None:
+                return _cl(AstValue(result), node)
+
+            elif is_number(second_right):
+                result = result and node.op_function_2(right.value, second_right.value)
+                return _cl(AstValue(result), node)
+
         return _cl(AstCompare(left, node.op, right, node.second_op, second_right), node)
 
     def visit_def(self, node:AstDef):
@@ -183,6 +196,13 @@ class Optimizer(ScopedVisitor):
         test = self.visit(node.test)
         if_node = self.visit(node.if_node)
         else_node = self.visit(node.else_node)
+
+        if is_boolean(test):
+            if test.value is True:
+                return if_node
+            elif test.value is False:
+                return else_node
+
         return _cl(AstIf(test, if_node, else_node), node)
 
     def visit_let(self, node:AstLet):

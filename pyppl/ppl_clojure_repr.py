@@ -78,7 +78,7 @@ class ClojureRepr(Visitor):
     def visit_function(self, node:AstFunction):
         params = node.parameters
         if node.vararg is not None:
-            params.append(node.vararg)
+            params.append('& ' + node.vararg)
         body = self.visit_indent(node.body)
         return "(fn [{}]\n  {})".format(' '.join(params), body)
 

@@ -82,6 +82,15 @@ class ClojureParser(clj.Visitor):
         args = [arg.visit(self) for arg in args]
         return AstCall(function, args)
 
+    def visit_concat(self, *seqs):
+        seqs = [s.visit(self) for s in seqs]
+        if len(seqs) == 0:
+            return AstValue(None)
+        elif len(seqs) == 1:
+            return seqs[0]
+        else:
+            return AstCall(AstSymbol('concat'), seqs)
+
     def visit_cond(self, *clauses):
         if len(clauses) == 0:
             return AstBody([])
@@ -188,6 +197,10 @@ class ClojureParser(clj.Visitor):
     def visit_let(self, bindings, *body):
         targets, sources = self.parse_bindings(bindings)
         return AstLet(targets, sources, self.parse_body(body))
+
+    def visit_list(self, *items):
+        items = [item.visit(self) for item in items]
+        return makeVector(items)
 
     def visit_nth(self, sequence, index):
         sequence = sequence.visit(self)

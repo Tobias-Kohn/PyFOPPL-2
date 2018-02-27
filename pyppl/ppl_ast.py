@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 23. Feb 2018, Tobias Kohn
+# 27. Feb 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -149,13 +149,16 @@ class AstNode(object):
             if getattr(self, 'verbose', False) is True or getattr(visitor, 'verbose', False) is True:
                 print("calling {}".format(methods[0]))
             if len(env_methods) == 2:
+                obj = self
                 env_methods[0](self)
                 try:
                     if visit_children_first:
                         self.visit_children(visitor)
                     result = methods[0](self)
+                    if isinstance(result, self.__class__):
+                        obj = result
                 finally:
-                    env_methods[1](self)
+                    env_methods[1](obj)
                 return result
             else:
                 if visit_children_first:
@@ -402,7 +405,7 @@ class AstBody(AstNode):
     def __init__(self, items:list, context:BodyContext=None):
         if items is None:
             items = []
-        self.items = items
+        self.items = [item for item in items if item is not None]
         self.context = context
         # flatten nested bodies:
         if any(isinstance(item, AstBody) for item in items):
@@ -414,7 +417,7 @@ class AstBody(AstNode):
                     new_items.append(item)
             self.items = new_items
         assert type(items) is list
-        assert all([isinstance(item, AstNode) for item in items])
+        assert all([isinstance(item, AstNode) for item in self.items])
 
     def __repr__(self):
         return "Body({})".format('; '.join([repr(item) for item in self.items]))
