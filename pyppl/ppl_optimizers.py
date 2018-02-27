@@ -93,6 +93,15 @@ class Optimizer(ScopedVisitor):
                 if op in ['*', '/']:
                     return _cl(AstUnary('-', right).visit(self), node)
 
+            if op == '-':
+                op = '+'
+                value = -value
+                right = AstValue(value)
+            elif op == '/' and value != 0:
+                op = '*'
+                value = 1 / value
+                right = AstValue(value)
+
             if isinstance(left, AstBinary) and is_number(left.right):
                 l_value = left.right.value
                 if op == left.op and op in ['+', '*', '|', '&']:
@@ -132,7 +141,7 @@ class Optimizer(ScopedVisitor):
         if left is node.left and right is node.right:
             return node
         else:
-            return _cl(AstBinary(left, node.op, right), node)
+            return _cl(AstBinary(left, op, right), node)
 
     def visit_body(self, node:AstBody):
         items = [item.visit(self) for item in node.items]
@@ -205,6 +214,21 @@ class Optimizer(ScopedVisitor):
         right = self.visit(node.right)
         second_right = self.visit(node.second_right)
 
+        if second_right is None:
+            if is_unary_neg(left) and is_unary_neg(right):
+                left, right = right.item, left.item
+            elif is_unary_neg(left) and is_number(right):
+                left, right = AstValue(-right.value), left.item
+            elif is_number(left) and is_unary_neg(right) :
+                right, left = AstValue(-left.value), right.item
+
+            if is_binary_add_sub(left) and is_number(right):
+                left = self.visit(AstBinary(left, '-', right))
+                right = AstValue(0)
+            elif is_binary_add_sub(right) and is_number(left):
+                right = self.visit(AstBinary(right, '-', left))
+                left = AstValue(0)
+
         if is_number(left) and is_number(right):
             result = node.op_function(left.value, right.value)
             if second_right is None:
@@ -238,9 +262,19 @@ class Optimizer(ScopedVisitor):
                                vararg=node.vararg, doc_string=node.doc_string), node)
 
     def visit_if(self, node:AstIf):
-        test = self.visit(node.test)
-        if_node = self.visit(node.if_node)
-        else_node = self.visit(node.else_node)
+        if node.has_else and is_unary_not(node.test):
+            test = self.visit(node.test.item)
+            else_node = self.visit(node.if_node)
+            if_node = self.visit(node.else_node)
+        else:
+            test = self.visit(node.test)
+            if_node = self.visit(node.if_node)
+            else_node = self.visit(node.else_node)
+
+        if else_node is not None:
+            if is_unary_not(test):
+                test = test.item
+                if_node, else_node = else_node, if_node
 
         if is_boolean(test):
             if test.value is True:
@@ -337,6 +371,17 @@ class Optimizer(ScopedVisitor):
         if is_number(item):
             if op == '-':
                 return _cl(AstValue(-item.value), node)
+
+        if op == 'not':
+            if isinstance(item, AstCompare) and item.second_right is None:
+                return _cl(AstCompare(item.left, item.neg_op, item.right), node)
+
+            if isinstance(item, AstBinary) and item.op in ['and', 'or']:
+                return self.visit(_cl(AstBinary(AstUnary('not', item.left), 'and' if item.op == 'or' else 'or',
+                                                AstUnary('not', item.right)), node))
+
+            if is_boolean(item):
+                return _cl(AstValue(not item.value), node)
 
         if item is node.item:
             return node

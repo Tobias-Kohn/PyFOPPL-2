@@ -470,16 +470,16 @@ class AstCall(AstNode):
 class AstCompare(AstOperator):
 
     __cmp_ops = {
-        '==': ('eq', lambda x, y: x == y),
-        '!=': ('ne', lambda x, y: x != y),
-        '<':  ('lt', lambda x, y: x < y),
-        '<=': ('le', lambda x, y: x <= y),
-        '>':  ('gt', lambda x, y: x > y),
-        '>=': ('ge', lambda x, y: x >= y),
-        'is': ('is', lambda x, y: x is y),
-        'in': ('in', lambda x, y: x in y),
-        'is not': ('is_not', lambda x, y: x is not y),
-        'not in': ('not_in', lambda x, y: x not in y),
+        '==': ('eq', lambda x, y: x == y, '!='),
+        '!=': ('ne', lambda x, y: x != y, '=='),
+        '<':  ('lt', lambda x, y: x < y,  '>='),
+        '<=': ('le', lambda x, y: x <= y, '>'),
+        '>':  ('gt', lambda x, y: x > y,  '<='),
+        '>=': ('ge', lambda x, y: x >= y, '<'),
+        'is': ('is', lambda x, y: x is y, 'is not'),
+        'in': ('in', lambda x, y: x in y, 'not in'),
+        'is not': ('is_not', lambda x, y: x is not y, 'is'),
+        'not in': ('not_in', lambda x, y: x not in y, 'in'),
     }
 
     def __init__(self, left:AstNode, op:str, right:AstNode,
@@ -511,6 +511,10 @@ class AstCompare(AstOperator):
         else:
             name = 'visit_binary_' + self.op_name
         return [name] + super(AstCompare, self).get_visitor_names()
+
+    @property
+    def neg_op(self):
+        return self.__cmp_ops[self.op][2]
 
     @property
     def op_function(self):
@@ -612,6 +616,21 @@ class AstIf(AstControl):
             return "if {} then {}".format(repr(self.test), repr(self.if_node))
         else:
             return "if {} then {} else {}".format(repr(self.test), repr(self.if_node), repr(self.else_node))
+
+    @property
+    def has_elif(self):
+        return isinstance(self.else_node, AstIf)
+
+    @property
+    def has_else(self):
+        return self.else_node is not None
+
+    @property
+    def is_equality_test(self):
+        if isinstance(self.test, AstCompare):
+            return self.test.op == '==' and self.test.second_op is None
+        else:
+            return False
 
 
 class AstImport(AstNode):
@@ -926,6 +945,12 @@ def makeVector(items):
 
 #######################################################################################################################
 
+def is_binary_add_sub(node:AstNode):
+    if isinstance(node, AstBinary):
+        return node.op in ['+', '-']
+    else:
+        return False
+
 def is_boolean(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) is bool
@@ -952,6 +977,18 @@ def is_string(node:AstNode):
 
 def is_symbol(node:AstNode):
     return isinstance(node, AstSymbol)
+
+def is_unary_neg(node:AstNode):
+    if isinstance(node, AstUnary):
+        return node.op == '-'
+    else:
+        return False
+
+def is_unary_not(node:AstNode):
+    if isinstance(node, AstUnary):
+        return node.op == 'not'
+    else:
+        return False
 
 def is_vector(node:AstNode):
     return isinstance(node, AstValueVector) or isinstance(node, AstVector)
