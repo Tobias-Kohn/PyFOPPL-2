@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 27. Feb 2018, Tobias Kohn
-# 27. Feb 2018, Tobias Kohn
+# 28. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 
@@ -183,4 +183,8 @@ def dump(ast):
     :param ast:  The AST representing the program.
     :return:     A string with valid `Clojure`-code.
     """
-    return ClojureRepr().visit(ast)
+    result = ClojureRepr().visit(ast)
+    if type(result) is list:
+        return '\n'.join(result)
+    else:
+        return result

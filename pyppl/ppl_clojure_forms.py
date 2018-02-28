@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 27. Feb 2018, Tobias Kohn
+# 28. Feb 2018, Tobias Kohn
 #
 from typing import Optional
 import inspect
@@ -167,7 +167,7 @@ class Value(ClojureObject):
         self.value = value
         if lineno is not None:
             self.lineno = lineno
-        assert type(value) in [bool, complex, float, int, str]
+        assert value is None or type(value) in [bool, complex, float, int, str]
         assert lineno is None or type(lineno) is int
 
     def __repr__(self):

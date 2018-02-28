@@ -4,12 +4,18 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 27. Feb 2018, Tobias Kohn
+# 28. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
+from .ppl_ast_annotators import has_side_effects
 from ast import copy_location as _cl
 
 class Optimizer(ScopedVisitor):
+
+    def can_embed(self, node:AstNode):
+        print("WARNING: can_embed not yet properly implemented!")
+        return True
+
 
     def visit_attribute(self, node:AstAttribute):
         base = self.visit(node.base)
@@ -146,6 +152,8 @@ class Optimizer(ScopedVisitor):
     def visit_body(self, node:AstBody):
         items = [item.visit(self) for item in node.items]
         items = [item for item in items if item is not None]
+        if len(items) > 1:
+            items = [item for item in items[:-1] if has_side_effects(item)] + [items[-1]]
         if len(items) == 1:
             return items[0]
         return _cl(AstBody(items), node)
@@ -161,6 +169,8 @@ class Optimizer(ScopedVisitor):
             try:
                 self.define_all(function.parameters, args, vararg=function.vararg)
                 result = self.visit(function.body)
+                if isinstance(result, AstReturn):
+                    result = result.value
             finally:
                 self.leave_scope()
             if result is not None:
@@ -238,12 +248,20 @@ class Optimizer(ScopedVisitor):
                 result = result and node.op_function_2(right.value, second_right.value)
                 return _cl(AstValue(result), node)
 
+        if node.op in ('in', 'not in') and is_vector(right) and second_right is None:
+            op = node.op
+            for item in right:
+                if left == item:
+                    return AstValue(True if op == 'in' else False)
+            return AstValue(False if op == 'in' else True)
+
         return _cl(AstCompare(left, node.op, right, node.second_op, second_right), node)
 
     def visit_def(self, node:AstDef):
         value = self.visit(node.value)
+        self.define(node.name, value, globally=node.global_context)
         if value is not node.value:
-            return _cl(AstDef(node.name, value), node)
+            return _cl(AstDef(node.name, value, global_context=node.global_context), node)
         else:
             return node
 
@@ -253,13 +271,25 @@ class Optimizer(ScopedVisitor):
 
     def visit_for(self, node:AstFor):
         source = self.visit(node.source)
-        body = self.visit(node.body)
-        return _cl(AstFor(node.target, source, body), node)
+        if is_vector(source):
+            result = AstBody([AstLet([node.target], [item], node.body) for item in source])
+            return self.visit(_cl(result, node))
+        else:
+            with self.scope():
+                self.protect(node.target)
+                body = self.visit(node.body)
+                if body is not node.body:
+                    return _cl(AstFor(node.target, source, body), node)
+        return node
 
     def visit_function(self, node:AstFunction):
-        body = self.visit(node.body)
-        return _cl(AstFunction(node.name, node.parameters, body,
-                               vararg=node.vararg, doc_string=node.doc_string), node)
+        with self.scope(node.name):
+            for param in node.parameters:
+                self.protect(param)
+            self.protect(node.vararg)
+            body = self.visit(node.body)
+            return _cl(AstFunction(node.name, node.parameters, body,
+                                   vararg=node.vararg, doc_string=node.doc_string), node)
 
     def visit_if(self, node:AstIf):
         if node.has_else and is_unary_not(node.test):
@@ -285,15 +315,17 @@ class Optimizer(ScopedVisitor):
         return _cl(AstIf(test, if_node, else_node), node)
 
     def visit_let(self, node:AstLet):
-        sources = [self.visit(item) for item in node.sources]
-        body = self.visit(node.body)
-        return _cl(AstLet(node.targets, sources, body), node)
+        with self.scope():
+            # define bindings
+            body = self.visit(node.body)
+            return _cl(body, node)
 
     def visit_list_for(self, node:AstListFor):
         source = self.visit(node.source)
-        expr = self.visit(node.expr)
-        test = self.visit(node.test)
-        return _cl(AstListFor(node.target, source, expr, test), node)
+        if is_vector(source) and node.test is None:
+            result = makeVector([AstLet([node.target], [item], node.expr) for item in source])
+            return self.visit(_cl(result, node))
+        return node
 
     def visit_observe(self, node:AstObserve):
         dist = self.visit(node.dist)
@@ -353,6 +385,8 @@ class Optimizer(ScopedVisitor):
         return _cl(AstSubscript(base, index), node)
 
     def visit_symbol(self, node:AstSymbol):
+        if node.protected:
+            return node
         value = self.resolve(node.name)
         if value is not None:
             return value
@@ -393,8 +427,25 @@ class Optimizer(ScopedVisitor):
         return makeVector(items)
 
     def visit_while(self, node:AstWhile):
+        # We must be very careful with optimizing a while-loop because
+        # variables might change during the execution of the loop.
         test = self.visit(node.test)
-        body = self.visit(node.body)
         if is_boolean(test) and not test.value:
             return AstBody([])
-        return _cl(AstWhile(test, body), node)
+        return node
+
+
+def optimize(ast):
+    opt = Optimizer()
+    result = opt.visit(ast)
+    if type(result) is list:
+        result = opt.get_globals() + result
+    elif isinstance(result, AstNode):
+        result = opt.get_globals() + [result]
+    else:
+        result = opt.get_globals()
+
+    if len(result) == 1:
+        return result[0]
+    else:
+        return result

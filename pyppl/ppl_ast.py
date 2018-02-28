@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 27. Feb 2018, Tobias Kohn
+# 28. Feb 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -15,7 +15,7 @@ class AstNode(object):
     but derive a specific AST-node from it.
     """
 
-    _attributes = {'col_offset', 'lineno'}
+    _attributes = { 'col_offset', 'lineno' }
     tag = None
 
     def get_fields(self):
@@ -101,6 +101,7 @@ class AstNode(object):
             result = ['visit_' + name]
         else:
             name2 = ''.join([n if n.islower() else "_" + n.lower() for n in name])
+            while name2.startswith('_'): name2 = name2[1:]
             result = ['visit_' + name, 'visit_' + name.lower(), 'visit_' + name2]
         return result
 
@@ -204,6 +205,24 @@ class AstNode(object):
         setattr(self, attr_name, result)
         return result
 
+    def equals(self, node):
+        try:
+            for attr in self.get_fields():
+                attr_a = getattr(self, attr)
+                attr_b = getattr(node, attr)
+                if type(attr_a) in (list, tuple) and type(attr_b) in (list, tuple):
+                    for a, b in zip(attr_a, attr_b):
+                        if a != b:
+                            return False
+                elif attr_a != attr_b:
+                    return False
+            return True
+        except:
+            return False
+
+    def __eq__(self, other):
+        return self.equals(other) if isinstance(other, self.__class__) else False
+
 
 class Visitor(object):
     """
@@ -240,6 +259,7 @@ class Scope(object):
         self.name = name
         self.lineno = lineno
         self.bindings = {}
+        self.protected_names = set()
         assert prev is None or isinstance(prev, Scope)
         assert name is None or type(name) is str
         assert lineno is None or type(lineno) is int
@@ -248,19 +268,42 @@ class Scope(object):
         assert type(name) is str and str != ''
         self.bindings[name] = value
 
+    def define_protected(self, name:str):
+        assert type(name) is str and str != ''
+        self.protected_names.add(name)
+
     def resolve(self, name:str):
-        if name in self.bindings:
+        if name in self.protected_names:
+            return None
+        elif name in self.bindings:
             return self.bindings[name]
         elif self.prev is not None:
-            return self.prev.find(name)
+            return self.prev.resolve(name)
         else:
             return None
+
+
+class ScopeContext(object):
+    """
+    The `ScopeContext` is a thin layer used to support scoping in `with`-statements inside methods of
+    `ScopedVisitor`, i.e. `with scope(): do something`.
+    """
+
+    def __init__(self, visitor):
+        self.visitor = visitor
+
+    def __enter__(self):
+        return self.visitor.scope
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.visitor.leave_scope()
 
 
 class ScopedVisitor(Visitor):
 
     def __init__(self):
         self.scope = Scope(None)
+        self.global_scope = self.scope
 
     def enter_scope(self, name:Optional[str]=None):
         self.scope = Scope(self.scope, name)
@@ -269,12 +312,32 @@ class ScopedVisitor(Visitor):
         self.scope = self.scope.prev
         assert(self.scope is not None)
 
-    def define(self, name:str, value):
-        self.scope.define(name, value)
+    def scope(self, name:Optional[str]=None):
+        self.enter_scope(name)
+        return ScopeContext(self)
+
+    def define(self, name, value, *, globally:bool=False):
+        scope = self.global_scope if globally else self.scope
+        if type(name) is str:
+            scope.define(name, value)
+        elif type(name) is tuple:
+            if is_vector(value) and len(name) == len(value):
+                for n, v in zip(name, value):
+                    scope.define(n, v)
+        else:
+            return False
+        return True
+
+    def protect(self, name):
+        if type(name) is str:
+            self.scope.define_protected(name)
+        elif type(name) is tuple:
+            for n in name:
+                self.protect(n)
 
     def define_all(self, names:list, values:list, *, vararg:Optional[str]=None):
-        assert names is list
-        assert values is list
+        assert type(names) is list
+        assert type(values) is list
         assert vararg is None or type(vararg) is str
         for name, value in zip(names, values):
             if isinstance(name, AstSymbol):
@@ -286,43 +349,6 @@ class ScopedVisitor(Visitor):
 
     def resolve(self, name:str):
         return self.scope.resolve(name)
-
-    def enter_def(self, node):
-        pass
-
-    def leave_def(self, node):
-        self.define(node.name, node.value)
-
-    def enter_import(self, node):
-        pass
-
-    def leave_import(self, node):
-        if node.imported_names is not None:
-            for name in node.imported_names:
-                self.define(name, AstSymbol(name, import_source=node.module_name))
-        else:
-            self.define(node.module_name, AstSymbol(node.module_name, import_source=node.module_name))
-
-    def enter_let(self, node):
-        self.enter_scope()
-        for target, source in zip(node.targets, node.sources):
-            self.define(target, source)
-
-    def leave_let(self, node):
-        self.leave_scope()
-
-#######################################################################################################################
-
-class AttributeVisitor(ScopedVisitor):
-
-    def set_attributes(self, dest: AstNode, children: list):
-        pass
-
-    def visit_node(self, node: AstNode):
-        children = node.get_ast_children()
-        for item in children:
-            self.visit(item)
-        return self.set_attributes(node, children)
 
 
 #######################################################################################################################
@@ -399,6 +425,14 @@ class AstBinary(AstOperator):
     def op_name(self):
         return self.__binary_ops[self.op][0]
 
+    def equals(self, node):
+        if self.op == node.op:
+            if self.left == node.left and self.right == node.right:
+                return True
+            elif self.op in ('+', '*', 'and', 'or') and self.left == node.right and self.right == node.left:
+                return True
+        return False
+
 
 class AstBody(AstNode):
 
@@ -422,6 +456,15 @@ class AstBody(AstNode):
     def __repr__(self):
         return "Body({})".format('; '.join([repr(item) for item in self.items]))
 
+    def equals(self, node):
+        if len(self.items) == len(node.items):
+            for i, j in zip(self.items, node.items):
+                if i != j:
+                    return False
+            return True
+        else:
+            return False
+
 
 class AstBreak(AstNode):
 
@@ -430,6 +473,9 @@ class AstBreak(AstNode):
 
     def __repr__(self):
         return "break"
+
+    def equals(self, _):
+        return True
 
 
 class AstCall(AstNode):
@@ -455,6 +501,8 @@ class AstCall(AstNode):
         name = self.function_name
         if name is not None:
             name = 'visit_call_' + name
+            for ch in ('+', '-', '.', '/', '*'):
+                name = name.replace(ch, '_')
             return [name] + super(AstCall, self).get_visitor_names()
         else:
             return super(AstCall, self).get_visitor_names()
@@ -465,6 +513,19 @@ class AstCall(AstNode):
             return self.function.name
         else:
             return None
+
+    def equals(self, node):
+        if self.function == node.function and len(self.args) == len(node.args) and \
+                len(self.keyword_args) == len(node.keyword_args):
+            for a, b in zip(self.args, node.args):
+                if a != b:
+                    return False
+            for key in self.keyword_args:
+                if key not in node or self.keyword_args[key] != node.keyword_args[key]:
+                    return False
+            return True
+        else:
+            return False
 
 
 class AstCompare(AstOperator):
@@ -561,6 +622,15 @@ class AstDict(AstNode):
     def __repr__(self):
         items = ["{}: {}".format(key, repr(self.items[key])) for key in self.items]
         return "{" + (', '.join(items)) + "}"
+
+    def equals(self, node):
+        if len(self.items) == len(node.items):
+            for key in self.items:
+                if key not in node.items or self.items[key] != node.items[key]:
+                    return False
+            return True
+        else:
+            return False
 
 
 class AstFor(AstControl):
@@ -671,7 +741,7 @@ class AstLet(AstNode):
 
 class AstListFor(AstNode):
 
-    def __init__(self, target, source: AstNode, expr: AstNode, test: AstNode = None):
+    def __init__(self, target, source:AstNode, expr:AstNode, test:AstNode=None):
         self.target = target
         self.source = source
         self.expr = expr
@@ -784,17 +854,22 @@ class AstSubscript(AstNode):
 
 class AstSymbol(AstLeaf):
 
-    def __init__(self, name:str, import_source:Optional[str]=None):
+    def __init__(self, name:str, import_source:Optional[str]=None, protected:bool=False):
         self.name = name
         self.import_source = import_source
+        self.protected = protected
         assert type(name) is str
         assert import_source is None or type(import_source) is str
+        assert type(protected) is bool
 
     def __repr__(self):
         return self.name
 
     def startswith(self, prefix:str):
         return self.name.startswith(prefix)
+
+    def equals(self, node):
+        return self.name == node.name
 
 
 class AstUnary(AstOperator):
@@ -831,7 +906,7 @@ class AstValue(AstLeaf):
 
     def __init__(self, value):
         self.value = value
-        assert type(value) in [bool, complex, float, int, str]
+        assert value is None or type(value) in [bool, complex, float, int, str]
 
     def __repr__(self):
         return repr(self.value)
@@ -960,6 +1035,12 @@ def is_boolean(node:AstNode):
 def is_integer(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) is int
+    else:
+        return False
+
+def is_none(node:AstNode):
+    if isinstance(node, AstValue):
+        return node.value is None
     else:
         return False
 

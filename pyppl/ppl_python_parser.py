@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 27. Feb 2018, Tobias Kohn
+# 28. Feb 2018, Tobias Kohn
 #
 from .ppl_ast import *
 import ast
@@ -206,6 +206,8 @@ class PythonParser(ast.NodeVisitor):
             op = self.__ast_ops__[node.ops[0].__class__]
             left = self.visit(node.left)
             right = self.visit(node.comparators[0])
+            if op in ('is', 'is not') and (is_boolean(right) or is_none(right)):
+                op = '==' if op == 'is' else '!='
             return _cl(AstCompare(left, op, right), node)
 
         elif len(node.ops) == 2:

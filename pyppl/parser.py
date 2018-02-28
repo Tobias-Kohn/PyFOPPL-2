@@ -4,9 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 22. Feb 2018, Tobias Kohn
+# 28. Feb 2018, Tobias Kohn
 #
-from . import ppl_foppl_parser, ppl_python_parser, ppl_optimizers
+from typing import Optional
+from . import ppl_foppl_parser, ppl_clojure_parser, ppl_python_parser, ppl_optimizers
 
 def _detect_language(s:str):
     for char in s:
@@ -24,18 +25,20 @@ def _detect_language(s:str):
 
     return None
 
-def parse(source:str, optimize:bool=True):
+def parse(source:str, *, optimize:bool=True, language:Optional[str]=None):
     result = None
     if type(source) is str and str != '':
-        lang = _detect_language(source)
-        if lang == 'py':
+        lang = _detect_language(source) if language is None else language.lower()
+        if lang in ['py', 'python']:
             result = ppl_python_parser.parse(source)
 
-        elif lang == 'clj':
+        elif lang in ['clj', 'clojure']:
+            result = ppl_clojure_parser.parse(source)
+
+        elif lang == 'foppl':
             result = ppl_foppl_parser.parse(source)
 
     if optimize and result is not None:
-        opt = ppl_optimizers.Optimizer()
-        result = opt.visit(result)
+        result = ppl_optimizers.optimize(result)
 
     return result
