@@ -4,18 +4,32 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 28. Feb 2018, Tobias Kohn
+# 01. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
-from .ppl_ast_annotators import has_side_effects
+from .ppl_ast_annotators import *
 from ast import copy_location as _cl
+
+
+# TODO: CALL is BROKEN!
+# TODO: Implement Expr-With-Prefix
+
+class AstExprWithPrefix(AstNode):
+
+    def __init__(self, expr:AstNode, prefix:AstNode):
+        self.expr = expr
+        self.prefix = prefix
+        assert type(self.expr) is AstNode
+        assert type(self.prefix) is AstNode
+
+    def __repr__(self):
+        return "ExprWithPrefix(PREFIX:{}, EXPR:{})".format(repr(self.prefix), repr(self.expr))
+
 
 class Optimizer(ScopedVisitor):
 
-    def can_embed(self, node:AstNode):
-        print("WARNING: can_embed not yet properly implemented!")
-        return True
-
+    def get_info(self, node:AstNode):
+        return InfoAnnotator().visit(node)
 
     def visit_attribute(self, node:AstAttribute):
         base = self.visit(node.base)
@@ -26,7 +40,7 @@ class Optimizer(ScopedVisitor):
 
     def visit_binary(self, node:AstBinary):
         if is_symbol(node.left) and is_symbol(node.right) and \
-                        node.op in ['-', '/', '//'] and node.left.name == node.right.name:
+                        node.op in ('-', '/', '//') and node.left.name == node.right.name:
             return AstValue(0 if node.op == '-' else 1)
 
         left = node.left.visit(self)
@@ -53,11 +67,11 @@ class Optimizer(ScopedVisitor):
         elif is_number(left):
             value = left.value
             if value == 0:
-                if op in ['+', '|', '^']:
+                if op in ('+', '|', '^'):
                     return right
                 elif op == '-':
                     return _cl(AstUnary('-', right).visit(self), node)
-                elif op in ['*', '/', '//', '%', '&', '<<', '>>', '**']:
+                elif op in ('*', '/', '//', '%', '&', '<<', '>>', '**'):
                     return left
 
             elif value == 1:
@@ -70,7 +84,7 @@ class Optimizer(ScopedVisitor):
 
             if isinstance(right, AstBinary) and is_number(right.left):
                 r_value = right.left.value
-                if op == right.op and op in ['+', '-', '*', '&', '|']:
+                if op == right.op and op in ('+', '-', '*', '&', '|'):
                     return _cl(AstBinary(AstValue(node.op_function(value, r_value)),
                                      '+' if op == '-' else op,
                                      right.right).visit(self), node)
@@ -84,7 +98,7 @@ class Optimizer(ScopedVisitor):
         elif is_number(right):
             value = right.value
             if value == 0:
-                if op in ['+', '-', '|', '^']:
+                if op in ('+', '-', '|', '^'):
                     return left
                 elif op == '**':
                     return AstValue(1)
@@ -92,11 +106,11 @@ class Optimizer(ScopedVisitor):
                     return right
 
             elif value == 1:
-                if op in ['*', '/', '**']:
+                if op in ('*', '/', '**'):
                     return left
 
             elif value == -1:
-                if op in ['*', '/']:
+                if op in ('*', '/'):
                     return _cl(AstUnary('-', right).visit(self), node)
 
             if op == '-':
@@ -110,19 +124,19 @@ class Optimizer(ScopedVisitor):
 
             if isinstance(left, AstBinary) and is_number(left.right):
                 l_value = left.right.value
-                if op == left.op and op in ['+', '*', '|', '&']:
+                if op == left.op and op in ('+', '*', '|', '&'):
                     return _cl(AstBinary(left.left, op, AstValue(node.op_function(l_value, value))).visit(self), node)
 
                 elif op == left.op and op == '-':
                     return _cl(AstBinary(left.left, '-', AstValue(l_value + value)).visit(self), node)
 
-                elif op == left.op and op in ['/', '**']:
+                elif op == left.op and op in ('/', '**'):
                     return _cl(AstBinary(left.left, '/', AstValue(l_value * value)).visit(self), node)
 
-                elif op in ['+', '-'] and left.op in ['+', '-']:
+                elif op in ['+', '-'] and left.op in ('+', '-'):
                     return _cl(AstBinary(left.left, left.op, AstValue(l_value - value)).visit(self), node)
 
-            if op in ['<<', '>>'] and type(value) is int:
+            if op in ('<<', '>>') and type(value) is int:
                 base = 2 if op == '<<' else 0.5
                 return _cl(AstBinary(left, '*', AstValue(base ** value)), node)
 
@@ -151,30 +165,26 @@ class Optimizer(ScopedVisitor):
 
     def visit_body(self, node:AstBody):
         items = [item.visit(self) for item in node.items]
-        items = [item for item in items if item is not None]
+        items = AstBody(items).items
         if len(items) > 1:
-            items = [item for item in items[:-1] if has_side_effects(item)] + [items[-1]]
+            items = [item for item in items[:-1] if not self.get_info(item).is_expr] + [items[-1]]
         if len(items) == 1:
             return items[0]
         return _cl(AstBody(items), node)
 
     def visit_call(self, node:AstCall):
-        # TODO: make sure we do not get rid of side-effects
-        # TODO: what about the 'return'-statement...?
         function = self.visit(node.function)
         args = [self.visit(arg) for arg in node.args]
         keywords = { key:self.visit(node.keyword_args[key]) for key in node.keyword_args }
         if isinstance(function, AstFunction):
-            self.enter_scope(function.name)
-            try:
+            with self.create_scope(function.name):
                 self.define_all(function.parameters, args, vararg=function.vararg)
                 result = self.visit(function.body)
-                if isinstance(result, AstReturn):
+
+            if self.get_info(result).return_count == 1:
+                if isinstance(result, AstReturn) and not result.has_prefix_body:
                     result = result.value
-            finally:
-                self.leave_scope()
-            if result is not None:
-                return result
+                    return result if result is not None else AstValue(None)
 
         elif isinstance(function, AstDict):
             if len(args) != 1 or len(keywords) != 0:
@@ -275,7 +285,7 @@ class Optimizer(ScopedVisitor):
             result = AstBody([AstLet([node.target], [item], node.body) for item in source])
             return self.visit(_cl(result, node))
         else:
-            with self.scope():
+            with self.create_scope():
                 self.protect(node.target)
                 body = self.visit(node.body)
                 if body is not node.body:
@@ -283,7 +293,7 @@ class Optimizer(ScopedVisitor):
         return node
 
     def visit_function(self, node:AstFunction):
-        with self.scope(node.name):
+        with self.create_scope(node.name):
             for param in node.parameters:
                 self.protect(param)
             self.protect(node.vararg)
@@ -315,10 +325,44 @@ class Optimizer(ScopedVisitor):
         return _cl(AstIf(test, if_node, else_node), node)
 
     def visit_let(self, node:AstLet):
-        with self.scope():
-            # define bindings
-            body = self.visit(node.body)
-            return _cl(body, node)
+        if len(node.targets) == 1 and self.get_info(node.source).can_embed:
+            if node.is_single_var:
+                with self.create_scope():
+                    self.define(node.target, self.visit(node.source))
+                    body = self.visit(node.body)
+                    return _cl(body, node)
+
+            source = self.visit(node.source)
+            if is_vector(source) and len(source) == len(node.target):
+                with self.create_scope():
+                    for t, v in zip(node.target, source):
+                        self.define(t, v)
+                    body = self.visit(node.body)
+                    return _cl(body, node)
+
+        elif len(node.targets) == 1:
+            source = self.visit(node.source)
+            with self.create_scope():
+                self.protect(node.target)
+                result = self.visit(node.body)
+
+            if node.is_single_var:
+                count = count_variable_usage(node.target, result)
+                if count == 1:
+                    with self.create_scope():
+                        self.define(node.target, source)
+                        result = self.visit(result)
+                    return _cl(result, node)
+
+            return _cl(AstLet(node.targets, [source], result), node)
+
+        elif len(node.targets) > 1:
+            result = node.body
+            for target, source in zip(reversed(node.targets), reversed(node.sources)):
+                result = self.visit(_cl(AstLet([target], [source], result), node))
+            return result
+
+        return node
 
     def visit_list_for(self, node:AstListFor):
         source = self.visit(node.source)
@@ -337,6 +381,14 @@ class Optimizer(ScopedVisitor):
 
     def visit_return(self, node:AstReturn):
         value = self.visit(node.value)
+        if isinstance(value, AstBody):
+            items = value.items
+            ret = self.visit(_cl(AstReturn(items[-1]), node))
+            return _cl(AstBody(items[:-1] + [ret]), value)
+        elif isinstance(value, AstLet):
+            ret = self.visit(_cl(AstReturn(value.body), node))
+            return _cl(AstLet(value.targets, value.sources, ret), value)
+
         if value is not node.value:
             return _cl(AstReturn(value), node)
         else:
@@ -410,7 +462,7 @@ class Optimizer(ScopedVisitor):
             if isinstance(item, AstCompare) and item.second_right is None:
                 return _cl(AstCompare(item.left, item.neg_op, item.right), node)
 
-            if isinstance(item, AstBinary) and item.op in ['and', 'or']:
+            if isinstance(item, AstBinary) and item.op in ('and', 'or'):
                 return self.visit(_cl(AstBinary(AstUnary('not', item.left), 'and' if item.op == 'or' else 'or',
                                                 AstUnary('not', item.right)), node))
 
@@ -438,14 +490,7 @@ class Optimizer(ScopedVisitor):
 def optimize(ast):
     opt = Optimizer()
     result = opt.visit(ast)
-    if type(result) is list:
-        result = opt.get_globals() + result
-    elif isinstance(result, AstNode):
-        result = opt.get_globals() + [result]
-    else:
-        result = opt.get_globals()
-
-    if len(result) == 1:
+    if type(result) in (list, tuple) and len(result) == 1:
         return result[0]
     else:
         return result

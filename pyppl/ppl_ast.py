@@ -4,10 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 28. Feb 2018, Tobias Kohn
+# 01. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
+from ast import copy_location as _cl
 
 class AstNode(object):
     """
@@ -265,11 +266,11 @@ class Scope(object):
         assert lineno is None or type(lineno) is int
 
     def define(self, name:str, value):
-        assert type(name) is str and str != ''
+        assert type(name) is str and str != '' and str != '_'
         self.bindings[name] = value
 
     def define_protected(self, name:str):
-        assert type(name) is str and str != ''
+        assert type(name) is str and str != '' and str != '_'
         self.protected_names.add(name)
 
     def resolve(self, name:str):
@@ -286,7 +287,7 @@ class Scope(object):
 class ScopeContext(object):
     """
     The `ScopeContext` is a thin layer used to support scoping in `with`-statements inside methods of
-    `ScopedVisitor`, i.e. `with scope(): do something`.
+    `ScopedVisitor`, i.e. `with create_scope(): do something`.
     """
 
     def __init__(self, visitor):
@@ -312,7 +313,7 @@ class ScopedVisitor(Visitor):
         self.scope = self.scope.prev
         assert(self.scope is not None)
 
-    def scope(self, name:Optional[str]=None):
+    def create_scope(self, name:Optional[str]=None):
         self.enter_scope(name)
         return ScopeContext(self)
 
@@ -436,7 +437,7 @@ class AstBinary(AstOperator):
 
 class AstBody(AstNode):
 
-    def __init__(self, items:list, context:BodyContext=None):
+    def __init__(self, items:Optional[list], context:BodyContext=None):
         if items is None:
             items = []
         self.items = [item for item in items if item is not None]
@@ -447,11 +448,20 @@ class AstBody(AstNode):
             for item in items:
                 if isinstance(item, AstBody):
                     new_items += item.items
+                elif isinstance(item, AstReturn) or isinstance(item, AstBreak):
+                    new_items.append(item)
+                    break
                 else:
                     new_items.append(item)
             self.items = new_items
-        assert type(items) is list
+        assert type(self.items) is list
         assert all([isinstance(item, AstNode) for item in self.items])
+
+    def __getitem__(self, item):
+        return self.items[item]
+
+    def __len__(self):
+        return len(self.items)
 
     def __repr__(self):
         return "Body({})".format('; '.join([repr(item) for item in self.items]))
@@ -462,6 +472,13 @@ class AstBody(AstNode):
                 if i != j:
                     return False
             return True
+        else:
+            return False
+
+    @property
+    def last_is_return(self):
+        if len(self.items) > 0:
+            return isinstance(self.items[-1], AstReturn)
         else:
             return False
 
@@ -737,6 +754,18 @@ class AstLet(AstNode):
     def __repr__(self):
         bindings = ['{} := {}'.format(target, repr(source)) for target, source in zip(self.targets, self.sources)]
         return "let [{}] in ({})".format('; '.join(bindings), repr(self.body))
+
+    @property
+    def is_single_var(self):
+        return len(self.targets) == 1 and type(self.targets[0]) is str
+
+    @property
+    def source(self):
+        return self.sources[0] if len(self.sources) == 1 else None
+
+    @property
+    def target(self):
+        return self.targets[0] if len(self.targets) == 1 else None
 
 
 class AstListFor(AstNode):
