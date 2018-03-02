@@ -115,6 +115,18 @@ class NodeInfo(object):
 
 class InfoAnnotator(Visitor):
 
+    __expr_functions__ = {
+        'abs',
+        'max',
+        'min',
+        'clojure.core.concat',
+        'clojure.core.conj',
+        'clojure.core.cons',
+        'math.cos',
+        'math.sin',
+        'math.sqrt',
+    }
+
     def visit_node(self, node:AstNode):
         return NodeInfo()
 
@@ -128,10 +140,11 @@ class InfoAnnotator(Visitor):
         return NodeInfo(base=[self.visit(item) for item in node.items])
 
     def visit_call(self, node: AstCall):
+        is_expr = node.function_name in self.__expr_functions__
         base = [self.visit(node.function)]
         args = [self.visit(arg) for arg in node.args]
         kw_args = [self.visit(node.keyword_args[key]) for key in node.keyword_args]
-        return NodeInfo(base=base + args + kw_args)
+        return NodeInfo(base=base + args + kw_args, is_expr=is_expr)
 
     def visit_compare(self, node: AstCompare):
         return NodeInfo(base=[self.visit(node.left), self.visit(node.right), self.visit(node.second_right)], is_expr=True)
@@ -231,6 +244,10 @@ class VarCountVisitor(Visitor):
             self.count += 1
         return node
 
+
+
+def get_info(ast:AstNode):
+    return InfoAnnotator().visit(ast)
 
 def count_variable_usage(name:str, ast:AstNode):
     vcv = VarCountVisitor(name)

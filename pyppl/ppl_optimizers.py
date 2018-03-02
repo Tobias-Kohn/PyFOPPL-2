@@ -11,20 +11,6 @@ from .ppl_ast_annotators import *
 from ast import copy_location as _cl
 
 
-# TODO: Implement Expr-With-Prefix
-
-class AstExprWithPrefix(AstNode):
-
-    def __init__(self, expr:AstNode, prefix:AstNode):
-        self.expr = expr
-        self.prefix = prefix
-        assert type(self.expr) is AstNode
-        assert type(self.prefix) is AstNode
-
-    def __repr__(self):
-        return "ExprWithPrefix(PREFIX:{}, EXPR:{})".format(repr(self.prefix), repr(self.expr))
-
-
 class Optimizer(ScopedVisitor):
 
     def get_info(self, node:AstNode):
@@ -193,8 +179,8 @@ class Optimizer(ScopedVisitor):
         i = 0
         while i < len(items):
             item = items[i]
-            if isinstance(item, AstDef) and not item.global_context:
-                if not any([item.name in fv for fv in free_vars]):
+            if isinstance(item, AstDef) and (self.is_global_scope or not item.global_context):
+                if all([item.name not in fv for fv in free_vars]):
                     del items[i]
                     continue
             i += 1

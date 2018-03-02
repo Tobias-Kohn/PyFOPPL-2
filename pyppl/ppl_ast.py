@@ -351,6 +351,10 @@ class ScopedVisitor(Visitor):
     def resolve(self, name:str):
         return self.scope.resolve(name)
 
+    @property
+    def is_global_scope(self):
+        return self.scope.prev is None
+
 
 #######################################################################################################################
 
