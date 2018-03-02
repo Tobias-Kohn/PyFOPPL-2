@@ -4,14 +4,13 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 01. Mar 2018, Tobias Kohn
+# 02. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import *
 from ast import copy_location as _cl
 
 
-# TODO: CALL is BROKEN!
 # TODO: Implement Expr-With-Prefix
 
 class AstExprWithPrefix(AstNode):
@@ -30,6 +29,27 @@ class Optimizer(ScopedVisitor):
 
     def get_info(self, node:AstNode):
         return InfoAnnotator().visit(node)
+
+    def parse_args(self, args:list):
+        can_factor_out = True
+        prefix = []
+        result = []
+        for arg in args:
+            arg = self.visit(arg)
+            info = self.get_info(arg)
+            if can_factor_out and isinstance(arg, AstBody) and not info.has_changed_vars:
+                if len(arg) == 0:
+                    result.append(AstValue(None))
+                elif len(arg) == 1:
+                    result.append(arg.items[0])
+                else:
+                    prefix += arg.items[:-1]
+                    result.append(arg.items[-1])
+            else:
+                can_factor_out = can_factor_out and info.is_expr
+                result.append(arg)
+
+        return prefix, result
 
     def visit_attribute(self, node:AstAttribute):
         base = self.visit(node.base)
@@ -168,6 +188,17 @@ class Optimizer(ScopedVisitor):
         items = AstBody(items).items
         if len(items) > 1:
             items = [item for item in items[:-1] if not self.get_info(item).is_expr] + [items[-1]]
+
+        free_vars = [self.get_info(item).free_vars for item in items]
+        i = 0
+        while i < len(items):
+            item = items[i]
+            if isinstance(item, AstDef) and not item.global_context:
+                if not any([item.name in fv for fv in free_vars]):
+                    del items[i]
+                    continue
+            i += 1
+
         if len(items) == 1:
             return items[0]
         return _cl(AstBody(items), node)
@@ -176,22 +207,36 @@ class Optimizer(ScopedVisitor):
         function = self.visit(node.function)
         args = [self.visit(arg) for arg in node.args]
         keywords = { key:self.visit(node.keyword_args[key]) for key in node.keyword_args }
-        if isinstance(function, AstFunction):
+        prefix, args = self.parse_args(args)
+        if isinstance(function, AstFunction) and len(keywords) == 0 and \
+                all([not self.get_info(arg).has_changed_vars for arg in args]):
             with self.create_scope(function.name):
                 self.define_all(function.parameters, args, vararg=function.vararg)
                 result = self.visit(function.body)
 
             if self.get_info(result).return_count == 1:
-                if isinstance(result, AstReturn) and not result.has_prefix_body:
+                if isinstance(result, AstReturn):
                     result = result.value
-                    return result if result is not None else AstValue(None)
+                    result = result if result is not None else AstValue(None)
+                    if len(prefix) > 0:
+                        result = AstBody(prefix + [result])
+                    return result
+
+                elif isinstance(result, AstBody) and result.last_is_return:
+                    items = prefix + result.items[:-1]
+                    result = result.items[-1].value
+                    result = result if result is not None else AstValue(None)
+                    return AstBody(items + [result])
 
         elif isinstance(function, AstDict):
             if len(args) != 1 or len(keywords) != 0:
                 raise TypeError("dict access requires exactly one argument ({} given)".format(len(args) + len(keywords)))
             return self.visit(_cl(AstSubscript(function, args[0]), node))
 
-        return _cl(AstCall(function, args, keywords), node)
+        result = _cl(AstCall(function, args, keywords), node)
+        if len(prefix) > 0:
+            result = AstBody(prefix + [result])
+        return result
 
     def visit_call_clojure_core_concat(self, node:AstCall):
         import itertools
@@ -325,30 +370,72 @@ class Optimizer(ScopedVisitor):
         return _cl(AstIf(test, if_node, else_node), node)
 
     def visit_let(self, node:AstLet):
-        if len(node.targets) == 1 and self.get_info(node.source).can_embed:
-            if node.is_single_var:
-                with self.create_scope():
-                    self.define(node.target, self.visit(node.source))
-                    body = self.visit(node.body)
-                    return _cl(body, node)
-
+        if len(node.targets) == 1:
             source = self.visit(node.source)
-            if is_vector(source) and len(source) == len(node.target):
-                with self.create_scope():
-                    for t, v in zip(node.target, source):
-                        self.define(t, v)
-                    body = self.visit(node.body)
-                    return _cl(body, node)
+            if node.target == '_':
+                return self.visit(_cl(AstBody(node.sources + [node.body]), node))
 
-        elif len(node.targets) == 1:
-            source = self.visit(node.source)
+            elif isinstance(source, AstBody) and len(node.source) > 1:
+                result = _cl(AstLet(node.targets, source.items[-1], node.body), node)
+                result = _cl(AstBody(source.items[:-1] + [result]), node.source)
+                return self.visit(result)
+
+            elif self.get_info(source).can_embed:
+                if node.is_single_var:
+                    with self.create_scope():
+                        self.define(node.target, self.visit(node.source))
+                        body = self.visit(node.body)
+                        return _cl(body, node)
+
+                if is_vector(source) and len(source) == len(node.target):
+                    with self.create_scope():
+                        for t, v in zip(node.target, source):
+                            self.define(t, v)
+                        body = self.visit(node.body)
+                        return _cl(body, node)
+
+            if isinstance(node.body, AstBody):
+                items = [(self.get_info(item).free_vars, item) for item in node.body.items]
+                if len(items) == 0:
+                    return source
+
+                elif len(items) == 1:
+                    return self.visit(_cl(AstLet(node.targets, node.sources, items[0][1]), node))
+
+                elif node.is_single_var:
+                    name = node.target
+                    start = 0
+                    while start < len(items) and name not in items[start][0]:
+                        start += 1
+                    stop = len(items)
+                    while stop > 0 and name not in items[stop-1][0]:
+                        stop -= 1
+
+                    if start >= stop:
+                        return self.visit(_cl(AstBody(node.sources + node.body.items), node))
+
+                    elif start > 0 or stop < len(items):
+                        prefix = [item[1] for item in items[:start]]
+                        suffix = [item[1] for item in items[stop:]]
+                        new_body = [item[1] for item in items[start:stop]]
+                        if len(new_body) == 1:
+                            new_body = new_body[0]
+                        else:
+                            new_body = AstBody(new_body)
+                        result = AstBody(prefix + [_cl(AstLet(node.targets, node.sources, new_body), node)] + suffix)
+                        return self.visit(result)
+
             with self.create_scope():
                 self.protect(node.target)
                 result = self.visit(node.body)
 
             if node.is_single_var:
                 count = count_variable_usage(node.target, result)
-                if count == 1:
+                if count == 0:
+                    result = AstBody(node.sources + [result])
+                    return self.visit(_cl(result, node))
+
+                elif count == 1:
                     with self.create_scope():
                         self.define(node.target, source)
                         result = self.visit(result)
@@ -490,6 +577,19 @@ class Optimizer(ScopedVisitor):
 def optimize(ast):
     opt = Optimizer()
     result = opt.visit(ast)
+
+    # remove definitions that are no longer used
+    if type(result) in (list, tuple):
+        free_vars = [InfoAnnotator().visit(node).free_vars for node in result]
+        i = 0
+        while i < len(result):
+            if isinstance(result[i], AstDef):
+                name = result[i].name
+                if all([name not in fv for fv in free_vars]):
+                    del result[i]
+                    continue
+            i += 1
+
     if type(result) in (list, tuple) and len(result) == 1:
         return result[0]
     else:

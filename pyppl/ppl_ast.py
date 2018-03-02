@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 01. Mar 2018, Tobias Kohn
+# 02. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -626,6 +626,10 @@ class AstDef(AstNode):
         if self.global_context:
             name = "def " + name
         return "{} := {}".format(name, repr(self.value))
+
+    @property
+    def is_function_def(self):
+        return isinstance(self.value, AstFunction)
 
 
 class AstDict(AstNode):

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 01. Mar 2018, Tobias Kohn
+# 02. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from .ppl_ast import *
@@ -87,6 +87,9 @@ class NodeInfo(object):
         elif name is not None:
             raise TypeError("NodeInfo(): cannot bind '{}'".format(name))
 
+        else:
+            return self
+
 
     def change_var(self, name):
         if type(name) is str:
@@ -134,7 +137,8 @@ class InfoAnnotator(Visitor):
         return NodeInfo(base=[self.visit(node.left), self.visit(node.right), self.visit(node.second_right)], is_expr=True)
 
     def visit_def(self, node: AstDef):
-        return self.visit(node.value).change_var(node.name)
+        result = self.visit(node.value)
+        return result.change_var(node.name)
 
     def visit_dict(self, node: AstDict):
         return NodeInfo(base=[self.visit(node.items[key]) for key in node.items], is_expr=True)
