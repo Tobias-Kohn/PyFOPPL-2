@@ -4,17 +4,35 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 02. Mar 2018, Tobias Kohn
+# 05. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import *
 from ast import copy_location as _cl
 
 
+# TODO: we might accidentally optimize a portion of the code several times, and need to be very careful about
+# side-effects. See , e.g., unrolling of while-loops
+
+
+# Note: Why do we need to protect all mutable variables?
+#   During the optimisation, we regularly visit a part of the AST multiple times, and we might even visit a part of
+#   the AST even though it might never actually be executed by the program. With LISP-based code, this is usually not
+#   a problem. However, with Python, a problem arises with statements such as `x += 1`. If we do not protect the
+#   variable `x`, we might accidentally increase the value of `x` more than once (or, in case of an `if`-statement,
+#   more than zero times), leading to wrong results.
+#   Hence, whenever we enter a new scope, we scan for all variables that are "defined" more than once, and then
+#   protect them, making them kind of "read-only".
+
+
+# When unrolling a while-loop, we have a maximum number of iterations:
+MAX_WHILE_ITERATIONS = 100
+
+
 class Optimizer(ScopedVisitor):
 
-    def get_info(self, node:AstNode):
-        return InfoAnnotator().visit(node)
+    def __init__(self):
+        super().__init__()
 
     def parse_args(self, args:list):
         can_factor_out = True
@@ -22,7 +40,7 @@ class Optimizer(ScopedVisitor):
         result = []
         for arg in args:
             arg = self.visit(arg)
-            info = self.get_info(arg)
+            info = get_info(arg)
             if can_factor_out and isinstance(arg, AstBody) and not info.has_changed_vars:
                 if len(arg) == 0:
                     result.append(AstValue(None))
@@ -173,9 +191,9 @@ class Optimizer(ScopedVisitor):
         items = [item.visit(self) for item in node.items]
         items = AstBody(items).items
         if len(items) > 1:
-            items = [item for item in items[:-1] if not self.get_info(item).is_expr] + [items[-1]]
+            items = [item for item in items[:-1] if not get_info(item).is_expr] + [items[-1]]
 
-        free_vars = [self.get_info(item).free_vars for item in items]
+        free_vars = [get_info(item).free_vars for item in items]
         i = 0
         while i < len(items):
             item = items[i]
@@ -195,12 +213,14 @@ class Optimizer(ScopedVisitor):
         keywords = { key:self.visit(node.keyword_args[key]) for key in node.keyword_args }
         prefix, args = self.parse_args(args)
         if isinstance(function, AstFunction) and len(keywords) == 0 and \
-                all([not self.get_info(arg).has_changed_vars for arg in args]):
+                all([not get_info(arg).has_changed_vars for arg in args]):
             with self.create_scope(function.name):
+                for var in get_info(function.body).change_var(function.param_names).mutable_vars:
+                    self.protect(var)
                 self.define_all(function.parameters, args, vararg=function.vararg)
                 result = self.visit(function.body)
 
-            if self.get_info(result).return_count == 1:
+            if get_info(result).return_count == 1:
                 if isinstance(result, AstReturn):
                     result = result.value
                     result = result if result is not None else AstValue(None)
@@ -260,6 +280,17 @@ class Optimizer(ScopedVisitor):
                 return sequence
         return self.visit_call(node)
 
+    def visit_call_range(self, node:AstCall):
+        args = [self.visit(arg) for arg in node.args]
+        if 1 <= len(args) <= 2 and all([is_integer(arg) for arg in args]):
+            if len(args) == 1:
+                result = range(args[0].value)
+            else:
+                result = range(args[0].value, args[1].value)
+            return _cl(AstValueVector(list(result)), node)
+
+        return self.visit_call(node)
+
     def visit_compare(self, node:AstCompare):
         left = self.visit(node.left)
         right = self.visit(node.right)
@@ -300,7 +331,10 @@ class Optimizer(ScopedVisitor):
 
     def visit_def(self, node:AstDef):
         value = self.visit(node.value)
-        self.define(node.name, value, globally=node.global_context)
+        if isinstance(value, AstFunction) or get_info(value).can_embed:
+            self.define(node.name, value, globally=node.global_context)
+        else:
+            self.protect(node.name)
         if value is not node.value:
             return _cl(AstDef(node.name, value, global_context=node.global_context), node)
         else:
@@ -317,6 +351,8 @@ class Optimizer(ScopedVisitor):
             return self.visit(_cl(result, node))
         else:
             with self.create_scope():
+                for n in get_info(node.body).changed_vars:
+                    self.protect(n)
                 self.protect(node.target)
                 body = self.visit(node.body)
                 if body is not node.body:
@@ -333,6 +369,16 @@ class Optimizer(ScopedVisitor):
                                    vararg=node.vararg, doc_string=node.doc_string), node)
 
     def visit_if(self, node:AstIf):
+        cond = []
+        current = node
+        while isinstance(current, AstIf):
+            cond.append((self.visit(current.test), self.visit(current.if_node)))
+            current = current.else_node
+        if current is not None:
+            cond.append((AstValue(True), self.visit(current)))
+
+        # TODO: Look at the cond and simplify!
+
         if node.has_else and is_unary_not(node.test):
             test = self.visit(node.test.item)
             else_node = self.visit(node.if_node)
@@ -366,7 +412,7 @@ class Optimizer(ScopedVisitor):
                 result = _cl(AstBody(source.items[:-1] + [result]), node.source)
                 return self.visit(result)
 
-            elif self.get_info(source).can_embed:
+            elif get_info(source).can_embed:
                 if node.is_single_var:
                     with self.create_scope():
                         self.define(node.target, self.visit(node.source))
@@ -381,7 +427,7 @@ class Optimizer(ScopedVisitor):
                         return _cl(body, node)
 
             if isinstance(node.body, AstBody):
-                items = [(self.get_info(item).free_vars, item) for item in node.body.items]
+                items = [(get_info(item).free_vars, item) for item in node.body.items]
                 if len(items) == 0:
                     return source
 
@@ -440,7 +486,10 @@ class Optimizer(ScopedVisitor):
     def visit_list_for(self, node:AstListFor):
         source = self.visit(node.source)
         if is_vector(source) and node.test is None:
-            result = makeVector([AstLet([node.target], [item], node.expr) for item in source])
+            if node.target == '_':
+                result = makeVector([node.expr for _ in source])
+            else:
+                result = makeVector([AstLet([node.target], [item], node.expr) for item in source])
             return self.visit(_cl(result, node))
         return node
 
@@ -547,22 +596,51 @@ class Optimizer(ScopedVisitor):
         else:
             return _cl(AstUnary(node.op, item), node)
 
+    def visit_value(self, node:AstValue):
+        return node
+
+    def visit_value_vector(self, node:AstValueVector):
+        return node
+
     def visit_vector(self, node:AstVector):
         items = [item.visit(self) for item in node.items]
         return makeVector(items)
 
     def visit_while(self, node:AstWhile):
-        # We must be very careful with optimizing a while-loop because
-        # variables might change during the execution of the loop.
         test = self.visit(node.test)
-        if is_boolean(test) and not test.value:
-            return AstBody([])
-        return node
+        with self.create_scope():
+            for n in get_info(node.body).changed_vars:
+                self.protect(n)
+            body = self.visit(node.body)
+
+        if is_boolean(test):
+            if not test.value:
+                return AstBody([])
+
+            if len(set.intersection(get_info(node.test).free_vars, get_info(node.body).changed_vars)) > 0:
+                result = []
+                while is_boolean_true(self.visit(node.test)) and len(result) < MAX_WHILE_ITERATIONS:
+                    result.append(self.visit(node.body))
+                if len(result) < MAX_WHILE_ITERATIONS:
+                    return AstBody(result)
+
+        if test is node.test and body is node.body:
+            return node
+        else:
+            return _cl(AstWhile(test, body), node)
 
 
 def optimize(ast):
+    if type(ast) is list:
+        ast = AstBody(ast)
+
     opt = Optimizer()
+    for name in get_info(ast).mutable_vars:
+        opt.protect(name)
     result = opt.visit(ast)
+
+    if isinstance(result, AstBody):
+        result = result.items
 
     # remove definitions that are no longer used
     if type(result) in (list, tuple):
@@ -578,5 +656,7 @@ def optimize(ast):
 
     if type(result) in (list, tuple) and len(result) == 1:
         return result[0]
+    elif type(result) in (list, tuple):
+        return AstBody(result)
     else:
         return result

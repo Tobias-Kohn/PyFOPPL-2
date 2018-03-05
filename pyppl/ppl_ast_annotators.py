@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 02. Mar 2018, Tobias Kohn
+# 05. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from .ppl_ast import *
@@ -36,6 +36,7 @@ class NodeInfo(object):
         else:
             raise TypeError("NodeInfo(): wrong type of 'base': '{}'".format(type(base)))
 
+        self.changed_var_count = { k: 1 for k in changed_vars }   # type:dict
         self.changed_vars = changed_vars            # type:set
         self.free_vars = free_vars                  # type:set
         self.has_observe = has_observe              # type:bool
@@ -53,13 +54,19 @@ class NodeInfo(object):
             self.has_side_effects = self.has_side_effects or item.has_side_effects
             self.is_expr = self.is_expr and item.is_expr
             self.return_count += item.return_count
+            for key in item.changed_var_count:
+                if key not in self.changed_var_count:
+                    self.changed_var_count[key] = 0
+                self.changed_var_count[key] += item.changed_var_count[key]
 
         self.has_changed_vars = len(self.changed_vars) > 0
         self.can_embed = self.is_expr and not (self.has_observe or self.has_return or self.has_sample or
                                                self.has_side_effects or self.has_changed_vars)
+        self.mutable_vars = set([key for key in self.changed_var_count if self.changed_var_count[key] > 1])
 
         assert type(self.changed_vars) is set and all([type(item) is str for item in self.changed_vars])
         assert type(self.free_vars) is set and all([type(item) is str for item in self.free_vars])
+        assert type(self.changed_var_count) is dict
         assert type(self.has_observe) is bool
         assert type(self.has_return) is bool
         assert type(self.has_sample) is bool
@@ -68,21 +75,25 @@ class NodeInfo(object):
         assert type(self.return_count) is int
 
 
-    def clone(self, **kwargs):
+    def clone(self, binding_vars:Optional[set]=None, **kwargs):
         result = NodeInfo(base=self)
         for key in kwargs:
             setattr(result, key, kwargs[key])
+        if binding_vars is not None:
+            result.changed_vars = set.difference(result.changed_vars, binding_vars)
+            result.free_vars = set.difference(result.free_vars, binding_vars)
+            for n in binding_vars:
+                if n in result.changed_var_count:
+                    del result.changed_var_count[n]
         return result
 
 
     def bind_var(self, name):
         if type(name) is str:
-            return self.clone(changed_vars=set.difference(self.free_vars, { name }),
-                              free_vars=set.difference(self.free_vars, { name }))
+            return self.clone(binding_vars={name})
 
         elif type(name) in (list, set, tuple) and all([type(item) is str for item in name]):
-            return self.clone(changed_vars=set.difference(self.free_vars, set(name)),
-                              free_vars=set.difference(self.free_vars, set(name)))
+            return self.clone(binding_vars=set(name))
 
         elif name is not None:
             raise TypeError("NodeInfo(): cannot bind '{}'".format(name))
@@ -93,13 +104,15 @@ class NodeInfo(object):
 
     def change_var(self, name):
         if type(name) is str:
-            return NodeInfo(base=self, changed_vars={ name })
+            name = {name}
 
         elif type(name) in (list, set, tuple) and all([type(item) is str for item in name]):
-            return NodeInfo(base=self, changed_vars=set(name))
+            name = set(name)
 
         elif name is not None:
             raise TypeError("NodeInfo(): cannot add var-name '{}'".format(name))
+
+        return NodeInfo(base=self, changed_vars=name)
 
 
     def union(self, *other):
@@ -111,6 +124,7 @@ class NodeInfo(object):
         else:
             raise TypeError("NodeInfo(): cannot build union with '{}'"
                             .format([item for item in other if not isinstance(item, NodeInfo)]))
+
 
 
 class InfoAnnotator(Visitor):
@@ -246,7 +260,7 @@ class VarCountVisitor(Visitor):
 
 
 
-def get_info(ast:AstNode):
+def get_info(ast:AstNode) -> NodeInfo:
     return InfoAnnotator().visit(ast)
 
 def count_variable_usage(name:str, ast:AstNode):

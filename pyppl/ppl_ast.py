@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 02. Mar 2018, Tobias Kohn
+# 05. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -683,6 +683,7 @@ class AstFunction(AstNode):
         self.body = body
         self.vararg = vararg
         self.doc_string = doc_string
+        self.param_names = set(parameters + [vararg] if vararg is not None else parameters)
         assert type(name) is str and name != ''
         assert type(parameters) is list and all([type(p) is str for p in parameters])
         assert isinstance(body, AstNode)
@@ -963,13 +964,13 @@ class AstValueVector(AstLeaf):
         assert type(items) is list and is_value_vector(items)
 
     def __getitem__(self, item):
-        return self.items[item]
+        return AstValue(self.items[item])
 
     def __len__(self):
         return len(self.items)
 
     def __iter__(self):
-        return iter(self.items)
+        return (AstValue(item) for item in self.items)
 
     def __repr__(self):
         return repr(self.items)
@@ -1066,6 +1067,12 @@ def is_binary_add_sub(node:AstNode):
 def is_boolean(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) is bool
+    else:
+        return False
+
+def is_boolean_true(node:AstNode):
+    if isinstance(node, AstValue):
+        return node.value is True
     else:
         return False
 
