@@ -8,6 +8,7 @@
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import *
+from .ppl_evaluator import PartialEvaluator
 from ast import copy_location as _cl
 
 
@@ -21,8 +22,8 @@ from ast import copy_location as _cl
 #   protect them, making them kind of "read-only".
 
 
-# When unrolling a while-loop, we have a maximum number of iterations:
-MAX_WHILE_ITERATIONS = 100
+# TODO: implement 'while'
+# TODO: make sure, 'while' is never assigned to something by adding a "None" to end where necessary
 
 
 def _all_(coll, p):
@@ -681,17 +682,6 @@ class Optimizer(ScopedVisitor):
                 self.protect(n)
             body = self.visit(node.body)
 
-        if is_boolean(test):
-            if not test.value:
-                return AstBody([])
-
-            if len(set.intersection(get_info(node.test).free_vars, get_info(node.body).changed_vars)) > 0:
-                result = []
-                while is_boolean_true(self.visit(node.test)) and len(result) < MAX_WHILE_ITERATIONS:
-                    result.append(self.visit(node.body))
-                if len(result) < MAX_WHILE_ITERATIONS:
-                    return AstBody(result)
-
         if test is node.test and body is node.body:
             return node
         else:
@@ -706,6 +696,7 @@ def optimize(ast):
     for name in get_info(ast).mutable_vars:
         opt.protect(name)
     result = opt.visit(ast)
+    result = PartialEvaluator().visit(result)
 
     if isinstance(result, AstBody):
         result = result.items
