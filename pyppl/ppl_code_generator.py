@@ -155,7 +155,8 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_dict(self, node: AstDict):
         result = { key: self.visit(node.items[key]) for key in node.items }
-        return repr(result)
+        result = ["{}: {}".format(key, result[key]) for key in result]
+        return "{" + ', '.join(result) + "}"
 
     def visit_for(self, node: AstFor):
         source = self.visit(node.source)
@@ -178,7 +179,15 @@ class CodeGenerator(ScopedVisitor):
         if node.has_else:
             else_expr = self.visit(node.else_node)
             if node.has_elif:
-                return "if {}:\n\t{}\nel{}".format(test, if_expr.replace('\n', '\n\t'), else_expr.replace('\n', '\n\t'))
+                if not else_expr.startswith("if"):
+                    enode = node.else_node
+                    etest = self.visit(enode.test)
+                    ebody = self.visit(enode.if_node)
+                    if enode.has_else:
+                        else_expr = "if {}:\n\t{}else:\n\t{}:".format(etest, ebody, self.visit(enode.else_body))
+                    else:
+                        else_expr = "if {}:\n\t{}".format(etest, ebody)
+                return "if {}:\n\t{}\nel{}".format(test, if_expr.replace('\n', '\n\t'), else_expr)
             elif '\n' in if_expr or '\n' in else_expr:
                 return "if {}:\n\t{}\nelse:\n\t{}".format(test, if_expr.replace('\n', '\n\t'),
                                                           else_expr.replace('\n', '\n\t'))
@@ -253,7 +262,11 @@ class CodeGenerator(ScopedVisitor):
     def visit_subscript(self, node: AstSubscript):
         base = self.visit(node.base)
         index = self.visit(node.index)
-        return "{}[{}]".format(base, index)
+        if isinstance(node.base, AstDict) and node.default is not None:
+            default = self.visit(node.default)
+            return "{}.get({}, {})".format(base, index, default)
+        else:
+            return "{}[{}]".format(base, index)
 
     def visit_symbol(self, node: AstSymbol):
         sym = self.resolve(node.name)

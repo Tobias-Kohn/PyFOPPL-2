@@ -11,10 +11,6 @@ from .ppl_ast_annotators import *
 from ast import copy_location as _cl
 
 
-# TODO: we might accidentally optimize a portion of the code several times, and need to be very careful about
-# side-effects. See , e.g., unrolling of while-loops
-
-
 # Note: Why do we need to protect all mutable variables?
 #   During the optimisation, we regularly visit a part of the AST multiple times, and we might even visit a part of
 #   the AST even though it might never actually be executed by the program. With LISP-based code, this is usually not
@@ -27,6 +23,22 @@ from ast import copy_location as _cl
 
 # When unrolling a while-loop, we have a maximum number of iterations:
 MAX_WHILE_ITERATIONS = 100
+
+
+def _all_(coll, p):
+    return all([p(item) for item in coll])
+
+def _all_equal(coll, f=None):
+    if f is not None:
+        coll = [f(item) for item in coll]
+    if len(coll) > 0:
+        return len([item for item in coll if item != coll[0]]) == 0
+    else:
+        return True
+
+def _all_instances(coll, cls):
+    return all([isinstance(item, cls) for item in coll])
+
 
 
 class Optimizer(ScopedVisitor):
@@ -369,15 +381,65 @@ class Optimizer(ScopedVisitor):
                                    vararg=node.vararg, doc_string=node.doc_string), node)
 
     def visit_if(self, node:AstIf):
-        cond = []
-        current = node
-        while isinstance(current, AstIf):
-            cond.append((self.visit(current.test), self.visit(current.if_node)))
-            current = current.else_node
-        if current is not None:
-            cond.append((AstValue(True), self.visit(current)))
+        cond = node.cond_tuples()
+        if len(cond) > 1:
+            cond_test = [self.visit(item[0]) for item in cond]
+            cond_body = [self.visit(item[1]) for item in cond]
+            if _all_equal(cond_body):
+                return self.visit(node.if_node)
 
-        # TODO: Look at the cond and simplify!
+            if _all_instances(cond_body, AstObserve):
+                if _all_equal([x.dist for x in cond_body]):
+                    return self.visit(
+                        AstObserve(cond_body[0].dist,
+                                   AstIf.from_cond_tuples(list(zip(cond_test, [x.value for x in cond_body]))))
+                    )
+
+                elif _all_equal([x.value for x in cond_body]):
+                    return self.visit(
+                        AstObserve(AstIf.from_cond_tuples(list(zip(cond_test, [x.dist for x in cond_body]))),
+                                   cond_body[0].value)
+                    )
+
+            if _all_instances(cond_body, AstCall) and _all_equal(cond_body, lambda x: x.function_name) and \
+                    _all_equal(cond_body, lambda x: x.arg_count) and all([not x.has_keyword_args for x in cond_body]):
+                args = [[item.args[i] for item in cond_body] for i in range(cond_body[0].arg_count)]
+                new_args = []
+                for arg in args:
+                    if _all_equal(arg):
+                        new_args.append(arg[0])
+                    else:
+                        new_args.append(AstIf.from_cond_tuples(list(zip(cond_test, arg))))
+                return self.visit(AstCall(cond_body[0].function, new_args))
+
+            if _all_instances(cond_body, AstDef) and _all_equal(cond_body, lambda x: x.name):
+                values = [item.value for item in cond_body]
+                return self.visit(AstDef(cond_body[0].name, AstIf.from_cond_tuples(list(zip(cond_test, values)))))
+
+            if (all([x.is_equality_const_test if isinstance(x, AstCompare) else False for x in cond_test]) or \
+                    (all([x.is_equality_const_test if isinstance(x, AstCompare) else False for x in cond_test[:-1]]) and
+                     is_boolean_true(cond_test[-1]))) and all([get_info(x).can_embed for x in cond_body]):
+                test_vars = []
+                test_values = []
+                for item in cond_test:
+                    if isinstance(item, AstValue):
+                        break
+                    elif isinstance(item.left, AstValue) and is_symbol(item.right):
+                        test_values.append(item.left)
+                        test_vars.append(item.right.name)
+                    elif is_symbol(item.left) and isinstance(item.right, AstValue):
+                        test_values.append(item.right)
+                        test_vars.append(item.left.name)
+                    else:
+                        break
+                if len(test_vars) == len(test_values) == len(cond_test) and len(set(test_vars)) == 1:
+                    d = AstDict({ a.value:b for a, b in zip(test_values, cond_body) })
+                    return self.visit(AstSubscript(d, AstSymbol(test_vars[0])))
+
+                elif len(test_vars) == len(test_values) == len(cond_test)-1 and len(set(test_vars)) == 1 and \
+                        is_boolean_true(cond_test[-1]):
+                    d = AstDict({ a.value:b for a, b in zip(test_values, cond_body[:-1]) })
+                    return self.visit(AstSubscript(d, AstSymbol(test_vars[0]), default=cond_body[-1]))
 
         if node.has_else and is_unary_not(node.test):
             test = self.visit(node.test.item)
@@ -546,17 +608,23 @@ class Optimizer(ScopedVisitor):
     def visit_subscript(self, node:AstSubscript):
         base = self.visit(node.base)
         index = self.visit(node.index)
+        default = self.visit(node.default)
         if is_integer(index):
             if isinstance(base, AstValueVector):
-                return _cl(AstValue(base.items[index.value]), node)
+                if 0 <= index.value < len(base) or default is None:
+                    return _cl(AstValue(base.items[index.value]), node)
+                else:
+                    return _cl(default, node)
             elif isinstance(base, AstVector):
-                return _cl(base.items[index.value], node)
+                if 0 <= index.value < len(base) or default is None:
+                    return _cl(base.items[index.value], node)
+                else:
+                    return _cl(default, node)
 
         if isinstance(base, AstDict) and isinstance(index, AstValue):
-            default = self.visit(node.default)
             return base.items.get(index.value, default)
 
-        return _cl(AstSubscript(base, index), node)
+        return _cl(AstSubscript(base, index, default), node)
 
     def visit_symbol(self, node:AstSymbol):
         if node.protected:

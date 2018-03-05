@@ -209,6 +209,7 @@ class AstNode(object):
     def equals(self, node):
         try:
             for attr in self.get_fields():
+                if attr in self._attributes: continue
                 attr_a = getattr(self, attr)
                 attr_b = getattr(node, attr)
                 if type(attr_a) in (list, tuple) and type(attr_b) in (list, tuple):
@@ -529,11 +530,19 @@ class AstCall(AstNode):
             return super(AstCall, self).get_visitor_names()
 
     @property
+    def arg_count(self):
+        return len(self.args)
+
+    @property
     def function_name(self):
         if isinstance(self.function, AstSymbol):
             return self.function.name
         else:
             return None
+
+    @property
+    def has_keyword_args(self):
+        return len(self.keyword_args) > 0
 
     def equals(self, node):
         if self.function == node.function and len(self.args) == len(node.args) and \
@@ -613,6 +622,10 @@ class AstCompare(AstOperator):
     @property
     def op_name_2(self):
         return self.__cmp_ops[self.second_op][0] if self.second_op is not None else None
+
+    @property
+    def is_equality_const_test(self):
+        return self.op == '==' and self.second_op is None and (is_constant(self.left) or is_constant(self.right))
 
 
 class AstDef(AstNode):
@@ -699,7 +712,7 @@ class AstFunction(AstNode):
 
 class AstIf(AstControl):
 
-    def __init__(self, test:AstNode, if_node:AstNode, else_node:Optional[AstNode]):
+    def __init__(self, test:AstNode, if_node:AstNode, else_node:Optional[AstNode]=None):
         self.test = test
         self.if_node = if_node
         self.else_node = else_node
@@ -727,6 +740,30 @@ class AstIf(AstControl):
             return self.test.op == '==' and self.test.second_op is None
         else:
             return False
+
+    def cond_tuples(self):
+        result = []
+        current = self
+        while isinstance(current, AstIf):
+            result.append((current.test, current.if_node))
+            current = current.else_node
+        if current is not None:
+            result.append((AstValue(True), current))
+        return result
+
+    @classmethod
+    def from_cond_tuples(cls, cond):
+        if len(cond) == 0:
+            return AstBody([])
+        elif len(cond) == 1:
+            a, b = cond[0]
+            if is_boolean_true(a):
+                return b
+            else:
+                return AstIf(a, b)
+        else:
+            a, b = cond[0]
+            return AstIf(a, b, cls.from_cond_tuples(cond[1:]))
 
 
 class AstImport(AstNode):
@@ -949,6 +986,9 @@ class AstValue(AstLeaf):
     def __repr__(self):
         return repr(self.value)
 
+    def equals(self, other):
+        return self.value == other.value
+
 
 class AstValueVector(AstLeaf):
 
@@ -994,6 +1034,9 @@ class AstValueVector(AstLeaf):
             return AstVector([AstValue(element)] + [AstValue(item) for item in self.items])
         else:
             return AstCall(AstSymbol('cons'), [element, self])
+
+    def equals(self, other):
+        return all([i == j for i, j in zip(self.items, other.items)])
 
     def to_vector(self):
         return AstVector([AstValue(item) for item in self.items])
@@ -1075,6 +1118,9 @@ def is_boolean_true(node:AstNode):
         return node.value is True
     else:
         return False
+
+def is_constant(node:AstNode):
+    return isinstance(node, AstValue) or isinstance(node, AstValueVector)
 
 def is_integer(node:AstNode):
     if isinstance(node, AstValue):
