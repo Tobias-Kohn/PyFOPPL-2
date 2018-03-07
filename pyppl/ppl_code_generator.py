@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 02. Mar 2018, Tobias Kohn
-# 05. Mar 2018, Tobias Kohn
+# 06. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import get_info
@@ -69,12 +69,14 @@ def _normalize_name(name):
     result = ''
     if name.endswith('?'):
         name = 'is_' + name[:-1]
+    if name.endswith('!'):
+        name = 'do_' + name[:-1]
     for n in name:
-        if n in ('+', '-', '?', '!'):
+        if n in ('+', '-', '?', '!', '_'):
             result += '_'
         elif n == '*':
             result += '_STAR_'
-        else:
+        elif '0' <= n <= '9' or 'A' <= n <= 'Z' or 'a' <= n <= 'z':
             result += n
     return result
 
@@ -293,8 +295,15 @@ class CodeGenerator(ScopedVisitor):
         return "while {}:\n\t{}".format(test, body)
 
 
-def generate_code(ast):
-    cg = CodeGenerator()
+def generate_code(ast, *, code_generator=None, name=None, parameters=None):
+    if code_generator is not None:
+        if callable(code_generator):
+            cg = code_generator()
+        else:
+            cg = code_generator
+    else:
+        cg = CodeGenerator()
+
     result = cg.visit(ast)
     if type(result) is list:
         result = cg.functions + result
@@ -302,4 +311,15 @@ def generate_code(ast):
     elif len(cg.functions) > 0:
         result = cg.functions + [result]
         result = '\n\n'.join(result)
+
+    if name is not None:
+        assert type(name) is str, "name must be a string"
+        if parameters is None:
+            parameters = ''
+        elif type(parameters) in (list, tuple):
+            parameters = ', '.join(parameters)
+        elif type(parameters) is not str:
+            raise TypeError("'parameters' must be a list of strings, or a string")
+        result = "def {}({}):\n\t{}".format(name, parameters, result)
+
     return result

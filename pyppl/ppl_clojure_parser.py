@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 27. Feb 2018, Tobias Kohn
+# 07. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_clojure_forms as clj
@@ -60,7 +60,7 @@ class ClojureParser(clj.Visitor):
         if len(body) == 1:
             return body[0]
         else:
-            return AstBody(body)
+            return makeBody(body)
 
     def parse_function(self, parameters, body):
         if clj.is_symbol_vector(parameters):
@@ -102,15 +102,15 @@ class ClojureParser(clj.Visitor):
 
     def visit_cond(self, *clauses):
         if len(clauses) == 0:
-            return AstBody([])
+            return makeBody([])
         if len(clauses) % 2 != 0:
             raise SyntaxError("the number of clauses in 'cond' must be even")
         clauses = list(reversed(clauses))
         result = clauses[0].visit(self)
         if not clj.is_symbol(clauses[1], ':else'):
-            result = AstIf(clauses[1].visit(self), result, None)
+            result = makeIf(clauses[1].visit(self), result, None)
         for test, body in zip(clauses[3::2], clauses[2::2]):
-            result = AstIf(test.visit(self), body.visit(self), result)
+            result = makeIf(test.visit(self), body.visit(self), result)
         return result
 
     def visit_conj(self, sequence, *elements):
@@ -132,7 +132,7 @@ class ClojureParser(clj.Visitor):
     def visit_def(self, target, source):
         target = self.parse_target(target)
         source = source.visit(self)
-        return AstDef(target, source, global_context=True)
+        return makeDef(target, source, True)
 
     def visit_defn(self, name, parameters, *body):
         if clj.is_symbol(name):
@@ -145,7 +145,7 @@ class ClojureParser(clj.Visitor):
         else:
             doc_string = None
         params, vararg, body = self.parse_function(parameters, body)
-        return AstDef(name, AstFunction(name, params, body, vararg=vararg, doc_string=doc_string), global_context=True)
+        return makeDef(name, AstFunction(name, params, body, vararg=vararg, doc_string=doc_string), True)
 
     def visit_do(self, body):
         return self.parse_body(body)
@@ -154,7 +154,7 @@ class ClojureParser(clj.Visitor):
         targets, sources = self.parse_bindings(bindings)
         result = self.parse_body(body)
         for target, source in zip(reversed(targets), reversed(sources)):
-            result = AstFor(target, source, result)
+            result = makeFor(target, source, result)
         return result
 
     def visit_drop(self, count, sequence):
@@ -174,7 +174,7 @@ class ClojureParser(clj.Visitor):
         targets, sources = self.parse_bindings(bindings)
         result = self.parse_body(body)
         for target, source in zip(reversed(targets), reversed(sources)):
-            result = AstListFor(target, source, result)
+            result = makeListFor(target, source, result)
         return result
 
     def visit_get(self, sequence, index, *defaults):
@@ -199,7 +199,7 @@ class ClojureParser(clj.Visitor):
         test = test.visit(self)
         body = body.visit(self)
         else_body = else_body[0].visit(self) if len(else_body) == 1 else None
-        return AstIf(test, body, else_body)
+        return makeIf(test, body, else_body)
 
     def visit_if_not(self, test, body, *else_body):
         if len(else_body) == 1:
@@ -218,7 +218,7 @@ class ClojureParser(clj.Visitor):
 
     def visit_let(self, bindings, *body):
         targets, sources = self.parse_bindings(bindings)
-        return AstLet(targets, sources, self.parse_body(body))
+        return makeLet(targets, sources, self.parse_body(body))
 
     def visit_nth(self, sequence, index):
         sequence = sequence.visit(self)
@@ -261,7 +261,7 @@ class ClojureParser(clj.Visitor):
         if len(result) == 1:
             return result[0]
         else:
-            return AstBody(result)
+            return makeBody(result)
 
     def visit_rest(self, sequence):
         sequence = sequence.visit(self)
@@ -325,7 +325,7 @@ class ClojureParser(clj.Visitor):
         if len(result) == 1:
             return result[0]
         else:
-            return AstBody(result)
+            return makeBody(result)
 
     def visit_vector(self, *items):
         items = [item.visit(self) for item in items]

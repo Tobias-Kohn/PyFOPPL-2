@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 05. Mar 2018, Tobias Kohn
+# 07. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from .ppl_ast import *
@@ -14,7 +14,10 @@ class NodeInfo(object):
 
     def __init__(self, *, base=None,
                  changed_vars:Optional[set]=None,
+                 cond_vars:Optional[set]=None,
                  free_vars:Optional[set]=None,
+                 has_break:bool=False,
+                 has_cond:bool=False,
                  has_observe:bool=False,
                  has_return:bool=False,
                  has_sample:bool=False,
@@ -24,6 +27,8 @@ class NodeInfo(object):
 
         if changed_vars is None:
             changed_vars = set()
+        if cond_vars is None:
+            cond_vars = set()
         if free_vars is None:
             free_vars = set()
 
@@ -38,7 +43,10 @@ class NodeInfo(object):
 
         self.changed_var_count = { k: 1 for k in changed_vars }   # type:dict
         self.changed_vars = changed_vars            # type:set
+        self.cond_vars = cond_vars                  # type:set
         self.free_vars = free_vars                  # type:set
+        self.has_break = has_break                  # type:bool
+        self.has_cond = has_cond                    # type:bool
         self.has_observe = has_observe              # type:bool
         self.has_return = has_return                # type:bool
         self.has_sample = has_sample                # type:bool
@@ -47,7 +55,9 @@ class NodeInfo(object):
         self.return_count = return_count            # type:int
         for item in bases:
             self.changed_vars = set.union(self.changed_vars, item.changed_vars)
+            self.cond_vars = set.union(self.cond_vars, item.cond_vars)
             self.free_vars = set.union(self.free_vars, item.free_vars)
+            self.has_cond = self.has_cond or item.has_cond
             self.has_observe = self.has_observe or item.has_observe
             self.has_return = self.has_return or item.has_return
             self.has_sample = self.has_sample or item.has_sample
@@ -67,6 +77,9 @@ class NodeInfo(object):
         assert type(self.changed_vars) is set and all([type(item) is str for item in self.changed_vars])
         assert type(self.free_vars) is set and all([type(item) is str for item in self.free_vars])
         assert type(self.changed_var_count) is dict
+        assert type(self.cond_vars) is set and all([type(item) is str for item in self.cond_vars]), cond_vars
+        assert type(self.has_break) is bool
+        assert type(self.has_cond) is bool
         assert type(self.has_observe) is bool
         assert type(self.has_return) is bool
         assert type(self.has_sample) is bool
@@ -81,6 +94,7 @@ class NodeInfo(object):
             setattr(result, key, kwargs[key])
         if binding_vars is not None:
             result.changed_vars = set.difference(result.changed_vars, binding_vars)
+            result.cond_vars = set.difference(result.cond_vars, binding_vars)
             result.free_vars = set.difference(result.free_vars, binding_vars)
             for n in binding_vars:
                 if n in result.changed_var_count:
@@ -112,7 +126,10 @@ class NodeInfo(object):
         elif name is not None:
             raise TypeError("NodeInfo(): cannot add var-name '{}'".format(name))
 
-        return NodeInfo(base=self, changed_vars=name)
+        if self.has_cond:
+            return NodeInfo(base=self, changed_vars=name, has_side_effects=True, cond_vars=name)
+        else:
+            return NodeInfo(base=self, changed_vars=name, has_side_effects=True)
 
 
     def union(self, *other):
@@ -153,6 +170,9 @@ class InfoAnnotator(Visitor):
     def visit_body(self, node: AstBody):
         return NodeInfo(base=[self.visit(item) for item in node.items])
 
+    def visit_break(self, _):
+        return NodeInfo(has_break=True)
+
     def visit_call(self, node: AstCall):
         is_expr = node.function_name in self.__expr_functions__
         base = [self.visit(node.function)]
@@ -184,7 +204,8 @@ class InfoAnnotator(Visitor):
             base = [self.visit(node.if_node), self.visit(node.else_node)]
         else:
             base = [self.visit(node.if_node)]
-        return NodeInfo(base=base + [self.visit(node.test)], is_expr=True)
+        cond_vars = set.union(*[item.changed_vars for item in base])
+        return NodeInfo(base=base + [self.visit(node.test)], is_expr=True, cond_vars=cond_vars, has_cond=True)
 
     def visit_import(self, node: AstImport):
         return NodeInfo()
@@ -237,7 +258,7 @@ class InfoAnnotator(Visitor):
 
     def visit_while(self, node: AstWhile):
         base = [self.visit(node.test), self.visit(node.body)]
-        return NodeInfo(base=base)
+        return NodeInfo(base=base, has_side_effects=True)
 
 
 class VarCountVisitor(Visitor):

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 28. Feb 2018, Tobias Kohn
+# 07. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 import ast
@@ -83,7 +83,7 @@ class PythonParser(ast.NodeVisitor):
             if require_return:
                 return _cl(AstReturn(AstValue(None)), body[0])
             else:
-                return _cl(AstBody([]), body[0])
+                return _cl(makeBody([]), body[0])
 
         result = []
         for item in body:
@@ -107,7 +107,7 @@ class PythonParser(ast.NodeVisitor):
         if len(result) == 1:
             return result[0]
         else:
-            return AstBody(result)
+            return makeBody(result)
 
     def generic_visit(self, node):
         raise NotImplementedError("cannot compile '{}'".format(ast.dump(node)))
@@ -117,19 +117,19 @@ class PythonParser(ast.NodeVisitor):
         if len(node.targets) == 1:
             target = node.targets[0]
             if isinstance(target, ast.Name):
-                return _cl(AstDef(target.id, source, global_context=self._is_global_name(target.id)), node)
+                return _cl(makeDef(target.id, source, self._is_global_name(target.id)), node)
 
             elif isinstance(target, ast.Tuple) and all([isinstance(t, ast.Name) for t in target.elts]):
-                return _cl(AstDef(tuple(t.id for t in target.elts), source), node)
+                return _cl(makeDef(tuple(t.id for t in target.elts), source), node)
 
         elif len(node.targets) > 1 and all(isinstance(target, ast.Name) for target in node.targets):
             result = []
             base = node.targets[-1].id
-            result.append(_cl(AstDef(base, source, global_context=self._is_global_name(base)), node))
+            result.append(_cl(makeDef(base, source, self._is_global_name(base)), node))
             base_name = AstSymbol(base)
             for target in node.targets[:-1]:
-                result.append(AstDef(target.id, base_name, global_context=self._is_global_name(target.id)))
-            return AstBody(result)
+                result.append(makeDef(target.id, base_name, self._is_global_name(target.id)))
+            return makeBody(result)
 
         raise NotImplementedError("cannot compile assignment '{}'".format(ast.dump(node)))
 
@@ -142,7 +142,7 @@ class PythonParser(ast.NodeVisitor):
             target = node.target.id
             source = self.visit(node.value)
             op = self.__ast_ops__[node.op.__class__]
-            return _cl(AstDef(target, AstBinary(AstSymbol(target), op, source)), node)
+            return _cl(makeDef(target, AstBinary(AstSymbol(target), op, source)), node)
         raise NotImplementedError("cannot assign to '{}'".format(ast.dump(node.target)))
 
     def visit_BinOp(self, node:ast.BinOp):
@@ -243,10 +243,10 @@ class PythonParser(ast.NodeVisitor):
         iter_ = self.visit(node.iter)
         body = self._visit_body(node.body)
         if isinstance(node.target, ast.Name):
-            return _cl(AstFor(node.target.id, iter_, body), node)
+            return _cl(makeFor(node.target.id, iter_, body), node)
 
         elif isinstance(node.target, ast.Tuple) and all([isinstance(t, ast.Name) for t in node.target.elts]):
-            return _cl(AstFor(tuple(t.id for t in node.target.elts), iter_, body), node)
+            return _cl(makeFor(tuple(t.id for t in node.target.elts), iter_, body), node)
 
         raise NotImplementedError("cannot compile for-loop: '{}'".format(ast.dump(node)))
 
@@ -263,7 +263,7 @@ class PythonParser(ast.NodeVisitor):
             body = self._visit_body(node.body, require_return=True)
         finally:
             self._leave_function()
-        return AstDef(name, _cl(AstFunction(name, arg_names, body), node), global_context=self.function_context is None)
+        return makeDef(name, _cl(AstFunction(name, arg_names, body), node), self.function_context is None)
 
     def visit_Global(self, node:ast.Global):
         for name in node.names:
@@ -274,13 +274,13 @@ class PythonParser(ast.NodeVisitor):
         test = self.visit(node.test)
         body = self._visit_body(node.body)
         else_body = self._visit_body(node.orelse) if len(node.orelse) > 0 else None
-        return _cl(AstIf(test, body, else_body), node)
+        return _cl(makeIf(test, body, else_body), node)
 
     def visit_IfExp(self, node:ast.IfExp):
         test = self.visit(node.test)
         body = self.visit(node.body)
         else_body = self.visit(node.orelse)
-        return _cl(AstIf(test, body, else_body), node)
+        return _cl(makeIf(test, body, else_body), node)
 
     def visit_Import(self, node:ast.Import):
         result = []
@@ -289,7 +289,7 @@ class PythonParser(ast.NodeVisitor):
         if len(result) == 1:
             return _cl(result[0], node)
         else:
-            return _cl(AstBody(result), node)
+            return _cl(makeBody(result), node)
 
     def visit_ImportFrom(self, node:ast.ImportFrom):
         if node.level != 0:
@@ -309,7 +309,7 @@ class PythonParser(ast.NodeVisitor):
             result = []
             for alias in node.names:
                 result.append(_cl(AstImport(module, [alias.name], alias.asname), node))
-            return _cl(AstBody(result), node)
+            return _cl(makeBody(result), node)
 
     def visit_Lambda(self, node: ast.Lambda):
         arg_names = [arg.arg for arg in node.args.args]
@@ -332,10 +332,10 @@ class PythonParser(ast.NodeVisitor):
         target = generator.target
         source = self.visit(generator.iter)
         if isinstance(target, ast.Name):
-            return _cl(AstListFor(target.id, source, expr, test), node)
+            return _cl(makeListFor(target.id, source, expr, test), node)
 
         elif isinstance(target, ast.Tuple) and all([isinstance(t, ast.Name) for t in node.target.elts]):
-            return _cl(AstListFor(tuple(t.id for t in node.target.elts), source, expr, test), node)
+            return _cl(makeListFor(tuple(t.id for t in node.target.elts), source, expr, test), node)
 
         raise NotImplementedError("cannot compile list comprehension: '{}'".format(ast.dump(node)))
 

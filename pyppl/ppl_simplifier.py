@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 05. Mar 2018, Tobias Kohn
+# 07. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import *
@@ -20,10 +20,6 @@ from ast import copy_location as _cl
 #   more than zero times), leading to wrong results.
 #   Hence, whenever we enter a new scope, we scan for all variables that are "defined" more than once, and then
 #   protect them, making them kind of "read-only".
-
-
-# TODO: implement 'while'
-# TODO: make sure, 'while' is never assigned to something by adding a "None" to end where necessary
 
 
 def _all_(coll, p):
@@ -42,7 +38,7 @@ def _all_instances(coll, cls):
 
 
 
-class Optimizer(ScopedVisitor):
+class Simplifier(ScopedVisitor):
 
     def __init__(self):
         super().__init__()
@@ -203,8 +199,6 @@ class Optimizer(ScopedVisitor):
     def visit_body(self, node:AstBody):
         items = [item.visit(self) for item in node.items]
         items = AstBody(items).items
-        if len(items) > 1:
-            items = [item for item in items[:-1] if not get_info(item).is_expr] + [items[-1]]
 
         free_vars = [get_info(item).free_vars for item in items]
         i = 0
@@ -360,7 +354,7 @@ class Optimizer(ScopedVisitor):
     def visit_for(self, node:AstFor):
         source = self.visit(node.source)
         if is_vector(source):
-            result = AstBody([AstLet([node.target], [item], node.body) for item in source])
+            result = makeBody([AstLet(node.target, item, node.body) for item in source])
             return self.visit(_cl(result, node))
         else:
             with self.create_scope():
@@ -369,7 +363,7 @@ class Optimizer(ScopedVisitor):
                 self.protect(node.target)
                 body = self.visit(node.body)
                 if body is not node.body:
-                    return _cl(AstFor(node.target, source, body), node)
+                    return _cl(makeFor(node.target, source, body), node)
         return node
 
     def visit_function(self, node:AstFunction):
@@ -676,11 +670,21 @@ class Optimizer(ScopedVisitor):
         return makeVector(items)
 
     def visit_while(self, node:AstWhile):
-        test = self.visit(node.test)
+        test_info = get_info(node.test)
+        body_info = get_info(node.body)
+
         with self.create_scope():
-            for n in get_info(node.body).changed_vars:
+            for n in body_info.changed_vars:
                 self.protect(n)
+            test = self.visit(node.test)
             body = self.visit(node.body)
+
+        if len(set.intersection(test_info.free_vars, body_info.changed_vars)) == 0:
+            if is_boolean(test) and test.value is False:
+                return _cl(AstBody([]), node)
+
+            if not body_info.has_break:
+                raise SyntaxError("'while'-loop without proper termination condition: '{}'".format(node))
 
         if test is node.test and body is node.body:
             return node
@@ -692,7 +696,7 @@ def optimize(ast):
     if type(ast) is list:
         ast = AstBody(ast)
 
-    opt = Optimizer()
+    opt = Simplifier()
     for name in get_info(ast).mutable_vars:
         opt.protect(name)
     result = opt.visit(ast)

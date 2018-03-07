@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 05. Mar 2018, Tobias Kohn
+# 07. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -138,6 +138,7 @@ class AstNode(object):
         :return:        The result returned by the `visit_XXX`-method of the visitor.
         """
         visit_children_first = getattr(visitor, '__visit_children_first__', False) is True
+        lm_method = getattr(visitor, 'set_current_line_number', None)
         method_names = self.get_visitor_names() + ['visit_node', 'generic_visit']
         methods = [getattr(visitor, name, None) for name in method_names]
         methods = [name for name in methods if name is not None]
@@ -152,10 +153,14 @@ class AstNode(object):
                 print("calling {}".format(methods[0]))
             if len(env_methods) == 2:
                 obj = self
+                if lm_method is not None and hasattr(self, 'lineno'):
+                    lm_method(self.lineno)
                 env_methods[0](self)
                 try:
                     if visit_children_first:
                         self.visit_children(visitor)
+                    if lm_method is not None and hasattr(self, 'lineno'):
+                        lm_method(self.lineno)
                     result = methods[0](self)
                     if isinstance(result, self.__class__):
                         obj = result
@@ -165,6 +170,8 @@ class AstNode(object):
             else:
                 if visit_children_first:
                     self.visit_children(visitor)
+                if lm_method is not None and hasattr(self, 'lineno'):
+                    lm_method(self.lineno)
                 return methods[0](self)
         else:
             raise RuntimeError("visitor '{}' has no visit-methods to call".format(type(visitor)))
@@ -206,6 +213,21 @@ class AstNode(object):
         setattr(self, attr_name, result)
         return result
 
+    def append(self, node):
+        """
+        Append another node to this one. In most cases, this means that a new `AstBody` with two items is created,
+        i.e. `x.append(y)` -> `AstBody([x, y])`.
+
+        In case the current node is an `if`-node, the second node will be appended to both branches.
+
+        :param node:  Another node to be appended to the current node.
+        :return:      A node that contains both nodes.
+        """
+        if node is not None:
+            return _cl(makeBody(self, node), self)
+        else:
+            return self
+
     def equals(self, node):
         try:
             for attr in self.get_fields():
@@ -231,6 +253,10 @@ class Visitor(object):
     There is no strict need to derive a visitor or walker from this base class. It does, however, provide a
     default implementation for `visit` as well as `visit_node`.
     """
+
+    def set_current_line_number(self, lineno:int):
+        if hasattr(self, 'current_lineno'):
+            self.current_lineno = lineno
 
     def visit(self, ast):
         if ast is None:
@@ -283,6 +309,12 @@ class Scope(object):
             return self.prev.resolve(name)
         else:
             return None
+
+    def resolve_locally(self, name:str):
+        if name in self.protected_names:
+            return None
+        else:
+            return self.bindings.get(name, None)
 
 
 class ScopeContext(object):
@@ -351,6 +383,9 @@ class ScopedVisitor(Visitor):
 
     def resolve(self, name:str):
         return self.scope.resolve(name)
+
+    def resolve_locally(self, name:str):
+        return self.scope.resolve_locally(name)
 
     @property
     def is_global_scope(self):
@@ -447,18 +482,6 @@ class AstBody(AstNode):
             items = []
         self.items = [item for item in items if item is not None]
         self.context = context
-        # flatten nested bodies:
-        if any(isinstance(item, AstBody) for item in items):
-            new_items = []
-            for item in items:
-                if isinstance(item, AstBody):
-                    new_items += item.items
-                elif isinstance(item, AstReturn) or isinstance(item, AstBreak):
-                    new_items.append(item)
-                    break
-                else:
-                    new_items.append(item)
-            self.items = new_items
         assert type(self.items) is list
         assert all([isinstance(item, AstNode) for item in self.items])
 
@@ -471,6 +494,16 @@ class AstBody(AstNode):
     def __repr__(self):
         return "Body({})".format('; '.join([repr(item) for item in self.items]))
 
+    def append(self, node):
+        if len(self.items) > 0 and (isinstance(self.items[-1], AstBreak) or isinstance(self.items[-1], AstReturn)):
+            return self
+
+        elif node is not None:
+            return _cl(makeBody(self.items, node), self)
+
+        else:
+            return self
+
     def equals(self, node):
         if len(self.items) == len(node.items):
             for i, j in zip(self.items, node.items):
@@ -481,11 +514,19 @@ class AstBody(AstNode):
             return False
 
     @property
+    def is_empty(self):
+        return len(self.items) == 0
+
+    @property
     def last_is_return(self):
         if len(self.items) > 0:
             return isinstance(self.items[-1], AstReturn)
         else:
             return False
+
+    @property
+    def non_empty(self):
+        return len(self.items) != 0
 
 
 class AstBreak(AstNode):
@@ -495,6 +536,9 @@ class AstBreak(AstNode):
 
     def __repr__(self):
         return "break"
+
+    def append(self, _):
+        return self
 
     def equals(self, _):
         return True
@@ -630,16 +674,16 @@ class AstCompare(AstOperator):
 
 class AstDef(AstNode):
 
-    def __init__(self, name, value:AstNode, global_context:bool=True):
+    def __init__(self, name:str, value:AstNode, global_context:bool=True):
         self.name = name
         self.value = value
         self.global_context = global_context
-        assert type(name) is str or (type(name) is tuple and all(type(item) is str for item in name))
+        assert type(name) is str
         assert isinstance(value, AstNode)
         assert type(global_context) is bool
 
     def __repr__(self):
-        name = "({})".format(', '.join(self.name)) if type(self.name) is tuple else self.name
+        name = self.name
         if self.global_context:
             name = "def " + name
         return "{} := {}".format(name, repr(self.value))
@@ -673,11 +717,11 @@ class AstDict(AstNode):
 
 class AstFor(AstControl):
 
-    def __init__(self, target, source:AstNode, body:AstNode):
+    def __init__(self, target:str, source:AstNode, body:AstNode):
         self.target = target
         self.source = source
         self.body = body
-        assert type(target) is str or (type(target) is tuple and all(type(item) is str for item in target))
+        assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(body, AstNode)
 
@@ -713,18 +757,25 @@ class AstFunction(AstNode):
 class AstIf(AstControl):
 
     def __init__(self, test:AstNode, if_node:AstNode, else_node:Optional[AstNode]=None):
+        if else_node is None:
+            else_node = AstValue(None)
         self.test = test
         self.if_node = if_node
         self.else_node = else_node
         assert isinstance(test, AstNode)
         assert isinstance(if_node, AstNode)
-        assert else_node is None or isinstance(else_node, AstNode)
+        assert isinstance(else_node, AstNode)
 
     def __repr__(self):
-        if self.else_node is None:
-            return "if {} then {}".format(repr(self.test), repr(self.if_node))
+        return "if {} then {} else {}".format(repr(self.test), repr(self.if_node), repr(self.else_node))
+
+    def append(self, node):
+        if node is not None:
+            if_node = self.if_node.append(node)
+            else_node = self.else_node.append(node) if self.else_node is not None else node
+            return _cl(AstIf(self.test, if_node, else_node), self)
         else:
-            return "if {} then {} else {}".format(repr(self.test), repr(self.if_node), repr(self.else_node))
+            return self
 
     @property
     def has_elif(self):
@@ -732,7 +783,10 @@ class AstIf(AstControl):
 
     @property
     def has_else(self):
-        return self.else_node is not None
+        if isinstance(self.else_node, AstValue) and self.else_node.value is None:
+            return False
+        else:
+            return True
 
     @property
     def is_equality_test(self):
@@ -754,7 +808,7 @@ class AstIf(AstControl):
     @classmethod
     def from_cond_tuples(cls, cond):
         if len(cond) == 0:
-            return AstBody([])
+            return makeBody([])
         elif len(cond) == 1:
             a, b = cond[0]
             if is_boolean_true(a):
@@ -788,40 +842,33 @@ class AstImport(AstNode):
 
 class AstLet(AstNode):
 
-    def __init__(self, targets:list, sources:list, body:AstNode):
-        self.targets = targets
-        self.sources = sources
+    def __init__(self, target:str, source:AstNode, body:AstNode):
+        self.target = target
+        self.source = source
         self.body = body
-        assert type(targets) is list and all([type(target) in (str, tuple) for target in targets])
-        assert type(sources) is list and all([isinstance(source, AstNode) for source in sources])
-        assert len(targets) == len(sources) and len(targets) > 0
+        assert type(target) is str
+        assert isinstance(source, AstNode)
         assert isinstance(body, AstNode)
 
     def __repr__(self):
-        bindings = ['{} := {}'.format(target, repr(source)) for target, source in zip(self.targets, self.sources)]
+        bindings = '{} := {}'.format(self.target, repr(self.source))
         return "let [{}] in ({})".format('; '.join(bindings), repr(self.body))
 
-    @property
-    def is_single_var(self):
-        return len(self.targets) == 1 and type(self.targets[0]) is str
-
-    @property
-    def source(self):
-        return self.sources[0] if len(self.sources) == 1 else None
-
-    @property
-    def target(self):
-        return self.targets[0] if len(self.targets) == 1 else None
+    def append(self, node):
+        if node is not None:
+            return _cl(AstLet(self.target, self.source, self.body.append(node)), self)
+        else:
+            return self
 
 
 class AstListFor(AstNode):
 
-    def __init__(self, target, source:AstNode, expr:AstNode, test:AstNode=None):
+    def __init__(self, target:str, source:AstNode, expr:AstNode, test:Optional[AstNode]=None):
         self.target = target
         self.source = source
         self.expr = expr
         self.test = test
-        assert type(target) is str or (type(target) is tuple and all(type(item) is str for item in target))
+        assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(expr, AstNode)
         assert test is None or isinstance(test, AstNode)
@@ -855,6 +902,9 @@ class AstReturn(AstNode):
 
     def __repr__(self):
         return "return {}".format(repr(self.value))
+
+    def append(self, _):
+        return self
 
 
 class AstSample(AstNode):
@@ -933,6 +983,7 @@ class AstSymbol(AstLeaf):
         self.name = name
         self.import_source = import_source
         self.protected = protected
+        self.symbol = None
         assert type(name) is str
         assert import_source is None or type(import_source) is str
         assert type(protected) is bool
@@ -945,6 +996,20 @@ class AstSymbol(AstLeaf):
 
     def equals(self, node):
         return self.name == node.name
+
+    @property
+    def is_readonly(self):
+        if self.symbol is not None:
+            return self.symbol.modify_count == 0
+        else:
+            return False
+
+    @property
+    def usage_count(self):
+        if self.symbol is not None:
+            return self.symbol.usage_count
+        else:
+            return None
 
 
 class AstUnary(AstOperator):
@@ -1041,6 +1106,14 @@ class AstValueVector(AstLeaf):
     def to_vector(self):
         return AstVector([AstValue(item) for item in self.items])
 
+    @property
+    def is_empty(self):
+        return len(self.items) == 0
+
+    @property
+    def non_empty(self):
+        return len(self.items) != 0
+
 
 class AstVector(AstNode):
 
@@ -1076,6 +1149,14 @@ class AstVector(AstNode):
         else:
             return AstCall(AstSymbol('cons'), [element, self])
 
+    @property
+    def is_empty(self):
+        return len(self.items) == 0
+
+    @property
+    def non_empty(self):
+        return len(self.items) != 0
+
 
 class AstWhile(AstControl):
 
@@ -1091,6 +1172,180 @@ class AstWhile(AstControl):
 
 #######################################################################################################################
 
+_temp_var_counter = 1000
+
+def generate_temp_var():
+    global _temp_var_counter
+    _temp_var_counter += 1
+    return "__tmp_{}__".format(_temp_var_counter)
+
+
+def makeBody(*items):
+    b_items = []
+    for item in items:
+        if isinstance(item, AstBody):
+            b_items += item.items
+        elif isinstance(item, AstNode):
+            b_items.append(item)
+        elif type(item) in (list, tuple):
+            b_items += list(item)
+        else:
+            raise TypeError("item of type '{}' cannot be part of the AST".format(type(item)))
+    items = b_items
+
+    i = 0
+    while i < len(items) - 1:
+        node = items[i]
+        if isinstance(node, AstBreak) or isinstance(node, AstReturn):
+            items = items[:i]
+            break
+
+        elif isinstance(node, AstAttribute):
+            items[i] = node.base
+
+        elif isinstance(node, AstBinary):
+            items[i] = node.right
+            items.insert(i, node.left)
+
+        elif isinstance(node, AstBody):
+            del items[i]
+            for itm in reversed(node.items):
+                items.insert(i, itm)
+
+        elif isinstance(node, AstCompare):
+            items[i] = node.right
+            items.insert(i, node.left)
+            if node.second_right is not None:
+                items.insert(i + 1, node.second_right)
+
+        elif isinstance(node, AstSlice):
+            parts = [x for x in (node.stop, node.start, node.base) if x is not None]
+            del items[i]
+            for p in parts:
+                items.insert(i, p)
+
+        elif isinstance(node, AstSubscript):
+            items[i] = node.base
+            if node.default is not None:
+                items.insert(i + 1, node.default)
+            items.insert(i + 1, node.index)
+
+        elif isinstance(node, AstSymbol):
+            del items[i]
+
+        elif isinstance(node, AstUnary):
+            items[i] = node.item
+
+        elif isinstance(node, AstValue) or isinstance(node, AstValueVector):
+            del items[i]
+
+        elif isinstance(node, AstVector):
+            del items[i]
+            for itm in reversed(node.items):
+                items.insert(i, itm)
+
+        else:
+            i += 1
+
+    if len(items) == 1:
+        return items[0]
+
+    else:
+        return AstBody(items)
+
+
+def makeDef(target, value:AstNode, is_global:bool=False):
+    if type(target) is str:
+        return AstDef(target, value)
+
+    elif type(target) is tuple and all(type(t) is str for t in target):
+        tmp = generate_temp_var()
+        result = [AstDef(tmp, value, is_global)]
+        i = 0
+        while i < len(target):
+            if target[i] != '_':
+                result.append(AstDef(target[i], makeSubscript(tmp, i), is_global))
+            i += 1
+        return makeBody(result)
+    else:
+        raise TypeError("cannot create 'def' for target '{}'".format(target))
+
+
+def makeFor(target, source, body):
+    if type(target) is tuple:
+        tmp = generate_temp_var()
+        i = len(target)
+        while i > 0:
+            i -= 0
+            body = AstLet(target[i], makeSubscript(tmp, i), body)
+        target = tmp
+    return AstFor(target, source, body)
+
+
+def makeIf(test, if_node, else_node):
+    if is_empty(if_node) and is_empty(else_node):
+        return test
+
+    elif is_empty(if_node):
+        test = AstUnary('not', test)
+        if_node, else_node = else_node, if_node
+
+    if if_node is None:
+        if_node = AstValue(None)
+    if else_node is None:
+        else_node = AstValue(None)
+
+    return AstIf(test, if_node, else_node)
+
+
+def makeLet(targets:list, sources:list, body:AstNode):
+    assert len(targets) == len(sources) > 0
+    if len(targets) == 1:
+        target = targets[0]
+        if target == '_':
+            return makeBody(sources, body)
+
+        elif type(target) is tuple:
+            tmp = generate_temp_var()
+            i = len(target)
+            while i > 0:
+                i -= 0
+                body = AstLet(target[i], makeSubscript(tmp, i), body)
+            return AstLet(tmp, sources[0], body)
+
+        return AstLet(targets[0], sources[0], body)
+
+    else:
+        return makeLet(targets[:-1], sources[:-1], AstLet(targets[-1], sources[-1], body))
+
+
+def makeListFor(target, source, expr, test=None):
+    if type(target) is tuple:
+        tmp = generate_temp_var()
+        i = len(target)
+        while i > 0:
+            i -= 0
+            expr = AstLet(target[i], makeSubscript(tmp, i), expr)
+        target = tmp
+    return AstListFor(target, source, expr, test)
+
+
+def makeSubscript(base, index):
+    if type(index) is int:
+        index = AstValue(index)
+    if type(base) is str:
+        base = AstSymbol(base)
+
+    if is_vector(base) and is_integer(index):
+        i = index.value
+        if 0 <= i < len(base.items):
+            return base[i]
+        elif -len(base.items) <= i < 0:
+            return base[i]
+
+    return AstSubscript(base, index)
+
+
 def makeVector(items):
     if all([isinstance(item, AstValue) for item in items]):
         return AstValueVector([item.value for item in items])
@@ -1098,6 +1353,7 @@ def makeVector(items):
         return AstValueVector(items)
     else:
         return AstVector(items)
+
 
 #######################################################################################################################
 
@@ -1121,6 +1377,18 @@ def is_boolean_true(node:AstNode):
 
 def is_constant(node:AstNode):
     return isinstance(node, AstValue) or isinstance(node, AstValueVector)
+
+def is_empty(node:AstNode):
+    if node is None:
+        return True
+    elif isinstance(node, AstBody):
+        return node.is_empty
+    elif isinstance(node, AstValueVector) or isinstance(node, AstVector):
+        return node.is_empty
+    elif isinstance(node, AstValue):
+        return node.value is None
+    else:
+        return False
 
 def is_integer(node:AstNode):
     if isinstance(node, AstValue):
