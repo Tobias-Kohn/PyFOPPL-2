@@ -756,15 +756,17 @@ class AstFunction(AstNode):
 
 class AstIf(AstControl):
 
-    def __init__(self, test:AstNode, if_node:AstNode, else_node:Optional[AstNode]=None):
+    def __init__(self, test:AstNode, if_node:AstNode, else_node:Optional[AstNode]=None, cond_name:Optional[str]=None):
         if else_node is None:
             else_node = AstValue(None)
         self.test = test
         self.if_node = if_node
         self.else_node = else_node
+        self.cond_name = cond_name
         assert isinstance(test, AstNode)
         assert isinstance(if_node, AstNode)
         assert isinstance(else_node, AstNode)
+        assert cond_name is None or type(cond_name) is str
 
     def __repr__(self):
         return "if {} then {} else {}".format(repr(self.test), repr(self.if_node), repr(self.else_node))
@@ -983,6 +985,7 @@ class AstSymbol(AstLeaf):
         self.name = name
         self.import_source = import_source
         self.protected = protected
+        self.original_name = name
         self.symbol = None
         assert type(name) is str
         assert import_source is None or type(import_source) is str
@@ -1174,6 +1177,11 @@ class AstWhile(AstControl):
 
 _temp_var_counter = 1000
 
+def generate_cond_var():
+    global _temp_var_counter
+    _temp_var_counter += 1
+    return "__cond_{}__".format(_temp_var_counter)
+
 def generate_temp_var():
     global _temp_var_counter
     _temp_var_counter += 1
@@ -1217,6 +1225,13 @@ def makeBody(*items):
             items.insert(i, node.left)
             if node.second_right is not None:
                 items.insert(i + 1, node.second_right)
+
+        elif isinstance(node, AstIf):
+            if node.cond_name is not None and not isinstance(node.test, AstSymbol):
+                items[i] = _cl(AstIf(AstSymbol(node.cond_name), node.if_node, node.else_node), node)
+                items.insert(i, makeDef(node.cond_name, node.test))
+            else:
+                i += 1
 
         elif isinstance(node, AstSlice):
             parts = [x for x in (node.stop, node.start, node.base) if x is not None]
@@ -1295,7 +1310,20 @@ def makeIf(test, if_node, else_node):
     if else_node is None:
         else_node = AstValue(None)
 
-    return AstIf(test, if_node, else_node)
+    if is_unary_not(test) and is_boolean(test.item):
+        test = AstValue(not test.item.value)
+
+    if is_boolean(test):
+        if test.value:
+            return if_node
+        else:
+            return else_node
+
+    if isinstance(test, AstSymbol) or isinstance(test, AstValue) or \
+            (is_unary_not(test) and isinstance(test.item, AstSymbol)):
+        return AstIf(test, if_node, else_node)
+    else:
+        return AstIf(test, if_node, else_node, cond_name=generate_cond_var())
 
 
 def makeLet(targets:list, sources:list, body:AstNode):
@@ -1395,6 +1423,17 @@ def is_integer(node:AstNode):
         return type(node.value) is int
     else:
         return False
+
+def is_negation_of(nodeA:AstNode, nodeB:AstNode):
+    if isinstance(nodeA, AstUnary):
+        if nodeA.op == 'not' and nodeA.item == nodeB:
+            return True
+    if isinstance(nodeB, AstUnary):
+        if nodeB.op == 'not' and nodeB.item == nodeA:
+            return True
+    if is_boolean(nodeA) and is_boolean(nodeB):
+        return nodeA.value != nodeB.value
+    return False
 
 def is_none(node:AstNode):
     if isinstance(node, AstValue):

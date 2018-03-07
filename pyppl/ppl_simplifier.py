@@ -10,6 +10,7 @@ from .ppl_ast import *
 from .ppl_ast_annotators import *
 from .ppl_evaluator import PartialEvaluator
 from ast import copy_location as _cl
+from .ppl_branch_scopes import BranchScopeVisitor
 
 
 # Note: Why do we need to protect all mutable variables?
@@ -38,7 +39,7 @@ def _all_instances(coll, cls):
 
 
 
-class Simplifier(ScopedVisitor):
+class Simplifier(BranchScopeVisitor):
 
     def __init__(self):
         super().__init__()
@@ -198,21 +199,7 @@ class Simplifier(ScopedVisitor):
 
     def visit_body(self, node:AstBody):
         items = [item.visit(self) for item in node.items]
-        items = AstBody(items).items
-
-        free_vars = [get_info(item).free_vars for item in items]
-        i = 0
-        while i < len(items):
-            item = items[i]
-            if isinstance(item, AstDef) and (self.is_global_scope or not item.global_context):
-                if all([item.name not in fv for fv in free_vars]):
-                    del items[i]
-                    continue
-            i += 1
-
-        if len(items) == 1:
-            return items[0]
-        return _cl(AstBody(items), node)
+        return _cl(makeBody(items), node)
 
     def visit_call(self, node:AstCall):
         function = self.visit(node.function)

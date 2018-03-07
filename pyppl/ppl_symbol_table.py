@@ -9,13 +9,18 @@
 from .ppl_ast import *
 
 
+_symbol_counter = 1000
+
 class Symbol(object):
 
     def __init__(self, name:str, read_only:bool=False, missing:bool=False):
+        global _symbol_counter
         self.name = name            # type:str
         self.usage_count = 0        # type:int
         self.modify_count = 0       # type:int
         self.read_only = read_only  # type:bool
+        self.full_name = "{}__sym_{}__".format(name, _symbol_counter)
+        _symbol_counter += 1
         if missing:
             self.modify_count = -1
         assert type(self.name) is str
@@ -28,15 +33,31 @@ class Symbol(object):
         self.modify_count += 1
 
     def __repr__(self):
-        return "{}[{}/{}]".format(self.name, self.usage_count, self.modify_count)
+        return "{}[{}/{}{}]".format(self.full_name, self.usage_count, self.modify_count, 'R' if self.read_only else '')
 
 
-class SymbolTable(ScopedVisitor):
+class SymbolTableGenerator(ScopedVisitor):
+    """
+    Walks the AST and records all symbols, their definitions and usages. After walking the AST, the field `symbols`
+    is a list of all symbols used in the program.
+
+    Note that nodes of type `AstSymbol` are modified by walking the tree. In particular, the Symbol-Table-Generator
+    sets the field `symbol` of `AstSymbol`-nodes and modifies the `name`-field, so that all names in the program are
+    guaranteed to be unique.
+    By relying on the fact that all names in the program are unique, we can later on use a flat list of symbol values
+    without worrying about correct scoping (the scoping is taken care of here).
+    """
 
     def __init__(self):
         super().__init__()
         self.symbols = []
         self.current_lineno = None
+
+    def get_symbols(self):
+        for symbol in self.symbols:
+            if symbol.modify_count == 0:
+                symbol.read_only = True
+        return self.symbols
 
     def create_symbol(self, name:str, read_only:bool=False, missing:bool=False):
         symbol = Symbol(name, read_only=read_only, missing=missing)
@@ -118,8 +139,9 @@ class SymbolTable(ScopedVisitor):
             self.visit(node.expr)
 
     def visit_symbol(self, node: AstSymbol):
-        symbol = self.use_symbol(node.name)
+        symbol = self.use_symbol(node.original_name)
         node.symbol = symbol
+        node.name = symbol.full_name
 
     def visit_while(self, node: AstWhile):
         return self.visit_node(node)

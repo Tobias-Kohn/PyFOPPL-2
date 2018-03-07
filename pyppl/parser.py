@@ -40,9 +40,9 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None):
             result = ppl_foppl_parser.parse(source)
 
     if result is not None:
-        symbol_table = ppl_symbol_table.SymbolTable()
+        symbol_table = ppl_symbol_table.SymbolTableGenerator()
         symbol_table.visit(result)
-        symbol_list = symbol_table.symbols
+        symbol_list = symbol_table.get_symbols()
     else:
         symbol_list = []
 
