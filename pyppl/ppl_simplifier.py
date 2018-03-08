@@ -603,18 +603,24 @@ class Simplifier(BranchScopeVisitor):
                     return _cl(default, node)
             elif isinstance(base, AstVector):
                 if 0 <= index.value < len(base) or default is None:
-                    return _cl(base.items[index.value], node)
+                    result = base.items[index.value]
+                    if get_info(result).can_embed:
+                        return _cl(result, node)
                 else:
                     return _cl(default, node)
 
         if isinstance(base, AstDict) and isinstance(index, AstValue):
-            return base.items.get(index.value, default)
+            result = base.items.get(index.value, default)
+            if get_info(result).can_embed:
+                return result
 
         return _cl(AstSubscript(base, index, default), node)
 
     def visit_symbol(self, node:AstSymbol):
         value = self.resolve(node.name)
-        if value is not None:
+        if isinstance(value, AstFunction):
+            return value
+        elif value is not None and get_info(value).can_embed:
             return value
         else:
             return node
