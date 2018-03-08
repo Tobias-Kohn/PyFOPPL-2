@@ -675,11 +675,13 @@ class AstCompare(AstOperator):
 
 class AstDef(AstNode):
 
-    def __init__(self, name:str, value:AstNode, global_context:bool=True):
+    _attributes = {'col_offset', 'lineno', 'original_name'}
+
+    def __init__(self, name:str, value:AstNode, global_context:bool=True, original_name:Optional[str]=None):
         self.name = name
         self.value = value
         self.global_context = global_context
-        self.original_name = name
+        self.original_name = name if original_name is None else original_name
         assert type(name) is str
         assert isinstance(value, AstNode)
         assert type(global_context) is bool
@@ -719,11 +721,11 @@ class AstDict(AstNode):
 
 class AstFor(AstControl):
 
-    def __init__(self, target:str, source:AstNode, body:AstNode):
+    def __init__(self, target:str, source:AstNode, body:AstNode, original_target:Optional[str]=None):
         self.target = target
         self.source = source
         self.body = body
-        self.original_target = target
+        self.original_target = target if original_target is None else original_target
         assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(body, AstNode)
@@ -847,11 +849,11 @@ class AstImport(AstNode):
 
 class AstLet(AstNode):
 
-    def __init__(self, target:str, source:AstNode, body:AstNode):
+    def __init__(self, target:str, source:AstNode, body:AstNode, original_target:Optional[str]=None):
         self.target = target
         self.source = source
         self.body = body
-        self.original_target = target
+        self.original_target = target if original_target is None else original_target
         assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(body, AstNode)
@@ -869,12 +871,13 @@ class AstLet(AstNode):
 
 class AstListFor(AstNode):
 
-    def __init__(self, target:str, source:AstNode, expr:AstNode, test:Optional[AstNode]=None):
+    def __init__(self, target:str, source:AstNode, expr:AstNode, test:Optional[AstNode]=None,
+                 original_target:Optional[str]=None):
         self.target = target
         self.source = source
         self.expr = expr
         self.test = test
-        self.original_target = target
+        self.original_target = target if original_target is None else original_target
         assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(expr, AstNode)
@@ -1231,13 +1234,6 @@ def makeBody(*items):
             if node.second_right is not None:
                 items.insert(i + 1, node.second_right)
 
-        elif isinstance(node, AstIf):
-            if node.cond_name is not None and not isinstance(node.test, AstSymbol):
-                items[i] = _cl(AstIf(AstSymbol(node.cond_name), node.if_node, node.else_node), node)
-                items.insert(i, makeDef(node.cond_name, node.test))
-            else:
-                i += 1
-
         elif isinstance(node, AstSlice):
             parts = [x for x in (node.stop, node.start, node.base) if x is not None]
             del items[i]
@@ -1332,10 +1328,13 @@ def makeIf(test, if_node, else_node):
             (is_unary_not(test) and isinstance(test.item, AstSymbol)):
         return AstIf(test, if_node, else_node)
     else:
-        return AstIf(test, if_node, else_node, cond_name=generate_cond_var())
+        return AstIf(test, if_node, else_node)
 
 
-def makeLet(targets:list, sources:list, body:AstNode):
+def makeLet(targets:list, sources:list, body:AstNode, original_target:Optional[str]=None):
+    if type(targets) in (str, tuple):
+        targets = [targets]
+        sources = [sources]
     assert len(targets) == len(sources) > 0
     if len(targets) == 1:
         target = targets[0]
@@ -1350,7 +1349,7 @@ def makeLet(targets:list, sources:list, body:AstNode):
                 body = AstLet(target[i], makeSubscript(tmp, i), body)
             return AstLet(tmp, sources[0], body)
 
-        return AstLet(targets[0], sources[0], body)
+        return AstLet(targets[0], sources[0], body, original_target=original_target)
 
     else:
         return makeLet(targets[:-1], sources[:-1], AstLet(targets[-1], sources[-1], body))

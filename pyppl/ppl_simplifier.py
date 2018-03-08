@@ -8,7 +8,6 @@
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import *
-from .ppl_evaluator import PartialEvaluator
 from ast import copy_location as _cl
 from .ppl_branch_scopes import BranchScopeVisitor
 from . import ppl_types
@@ -338,7 +337,8 @@ class Simplifier(BranchScopeVisitor):
             value = self.visit(node.value)
             self.define(node.name, value)
             if value is not node.value:
-                return _cl(AstDef(node.name, value, global_context=node.global_context), node)
+                return _cl(AstDef(node.name, value, global_context=node.global_context,
+                                  original_name=node.original_name), node)
             else:
                 return node
 
@@ -355,7 +355,8 @@ class Simplifier(BranchScopeVisitor):
             src_type = self.get_type(source)
             if isinstance(src_type, ppl_types.SequenceType) and src_type.size is not None:
                 result = makeBody([
-                             AstLet(node.target, makeSubscript(source, i), node.body) for i in range(src_type.size)
+                             AstLet(node.target, makeSubscript(source, i), node.body,
+                                    original_target=node.original_target) for i in range(src_type.size)
                          ])
                 return self.visit(_cl(result, node))
 
@@ -468,7 +469,8 @@ class Simplifier(BranchScopeVisitor):
         source = self.visit_expr(node.source)
         src_info = get_info(source)
         if isinstance(source, AstBody) and len(node.source) > 1:
-            result = _cl(makeLet(node.target, source.items[-1], node.body), node)
+            result = _cl(AstLet(node.target, source.items[-1], node.body,
+                                original_target=node.original_target), node)
             result = _cl(makeBody(source.items[:-1], result), node.source)
             return self.visit(result)
 
@@ -482,7 +484,8 @@ class Simplifier(BranchScopeVisitor):
             if len(node.body) == 0:
                 return self.visit(node.source)
             elif len(node.body) == 1:
-                return self.visit(_cl(makeLet(node.target, node.source, node.body.items[0]), node))
+                return self.visit(_cl(AstLet(node.target, node.source, node.body.items[0],
+                                             original_target=node.original_target), node))
 
             items = [(get_info(item), item) for item in node.body.items]
             name = node.target
@@ -500,7 +503,8 @@ class Simplifier(BranchScopeVisitor):
                 prefix = [item[1] for item in items[:start]]
                 suffix = [item[1] for item in items[stop:]]
                 new_body = makeBody([item[1] for item in items[start:stop]])
-                result = makeBody(prefix, _cl(makeLet(node.target, node.source, new_body), node), suffix)
+                result = makeBody(prefix, _cl(AstLet(node.target, node.source, new_body,
+                                                     original_target=node.original_target), node), suffix)
                 return self.visit(result)
 
         # Try and simplify without expanding the let-variable
@@ -508,7 +512,7 @@ class Simplifier(BranchScopeVisitor):
         with self.create_lock(node.target):
             source = self.visit(node.source)
             result = self.visit(node.body)
-            return _cl(makeLet(node.target, source, result), node)
+            return _cl(AstLet(node.target, source, result, original_target=node.original_target), node)
 
     def visit_list_for(self, node:AstListFor):
         source = self.visit(node.source)
@@ -526,11 +530,13 @@ class Simplifier(BranchScopeVisitor):
                 return self.visit(_cl(makeVector([node.expr for _ in range(src_len)]), node))
 
             if is_vector(source):
-                result = makeVector([makeLet(node.target, item, node.expr) for item in source])
+                result = makeVector([AstLet(node.target, item, node.expr,
+                                            original_target=node.original_target) for item in source])
                 return self.visit(_cl(result, node))
 
             elif src_len is not None:
-                result = makeVector([makeLet(node.target, makeSubscript(source, i), node.expr) for i in range(src_len)])
+                result = makeVector([AstLet(node.target, makeSubscript(source, i), node.expr,
+                                             original_target=node.original_target) for i in range(src_len)])
                 return self.visit(_cl(result, node))
 
         for name in get_info(node.expr).changed_vars:
@@ -538,7 +544,7 @@ class Simplifier(BranchScopeVisitor):
 
         test = self.visit(node.test)
         expr = self.visit(node.expr)
-        return _cl(AstListFor(node.target, source, expr, test), node)
+        return _cl(AstListFor(node.target, source, expr, test, original_target=node.original_target), node)
 
     def visit_observe(self, node:AstObserve):
         dist = self.visit(node.dist)
@@ -557,7 +563,7 @@ class Simplifier(BranchScopeVisitor):
         elif isinstance(value, AstLet):
             with self.create_lock(value.target):
                 ret = self.visit(_cl(AstReturn(value.body), node))
-            return _cl(makeLet(value.target, value.source, ret), value)
+            return _cl(AstLet(value.target, value.source, ret), value)
 
         if value is not node.value:
             return _cl(AstReturn(value), node)

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 02. Mar 2018, Tobias Kohn
-# 06. Mar 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import get_info
@@ -87,6 +87,7 @@ class CodeGenerator(ScopedVisitor):
         super().__init__()
         self.functions = []
         self._symbol_counter_ = 99
+        self.short_names = False        # used for debugging
 
     def generate_symbol(self):
         self._symbol_counter_ += 1
@@ -135,7 +136,7 @@ class CodeGenerator(ScopedVisitor):
             return "({} {} {} {} {})".format(left, node.op, right, node.second_op, second_right)
 
     def visit_def(self, node: AstDef):
-        name = _normalize_name(node.name)
+        name = _normalize_name(node.original_name if self.short_names else node.name)
         if isinstance(node.value, AstFunction):
             function = node.value
             params = function.parameters
@@ -161,9 +162,10 @@ class CodeGenerator(ScopedVisitor):
         return "{" + ', '.join(result) + "}"
 
     def visit_for(self, node: AstFor):
+        name = _normalize_name(node.original_target if self.short_names else node.target)
         source = self.visit(node.source)
         body = self.visit(node.body).replace('\n', '\n\t')
-        return "for {} in {}:\n\t{}".format(_normalize_name(node.target), source, body)
+        return "for {} in {}:\n\t{}".format(name, source, body)
 
     def visit_function(self, node: AstFunction):
         params = node.parameters
@@ -210,27 +212,18 @@ class CodeGenerator(ScopedVisitor):
             return "from {} import {}".format(node.module_name, ', '.join(node.imported_names))
 
     def visit_let(self, node: AstLet):
-        prefix = "_LET_"
-        result = []
-        with self.create_scope():
-            for t, s in zip(node.targets, node.sources):
-                if _is_block(s):
-                    item = _push_return(s, lambda x: AstDef(t, x))
-                    result.append(self.visit(item))
-                else:
-                    result.append("{}{} = {}".format(prefix, _normalize_name(t), self.visit(s)))
-                self.define(t, AstSymbol(prefix + t))
-            result.append(self.visit(node.body))
-        return '\n'.join(result)
+        name = _normalize_name(node.original_target if self.short_names else node.target)
+        return "{} = {}\n{}".format(name, self.visit(node.source), self.visit(node.body))
 
     def visit_list_for(self, node: AstListFor):
+        name = _normalize_name(node.original_target if self.short_names else node.target)
         expr = self.visit(node.expr)
         if _is_block(node.expr):
             expr = self.add_function([str(node.target)], expr)
             expr += "({})".format(str(node.target))
         source = self.visit(node.source)
         test = (' if ' + self.visit(node.test)) if node.test is not None else ''
-        return "[{} for {} in {}{}]".format(expr, _normalize_name(node.target), source, test)
+        return "[{} for {} in {}{}]".format(expr, name, source, test)
 
     def visit_observe(self, node: AstObserve):
         dist = self.visit(node.dist)
@@ -271,6 +264,8 @@ class CodeGenerator(ScopedVisitor):
             return "{}[{}]".format(base, index)
 
     def visit_symbol(self, node: AstSymbol):
+        if self.short_names:
+            return node.original_name
         sym = self.resolve(node.name)
         if isinstance(sym, AstSymbol):
             return _normalize_name(sym.name)

@@ -4,11 +4,15 @@
 # License: MIT (see LICENSE.txt)
 #
 # 27. Feb 2018, Tobias Kohn
-# 28. Feb 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 
 class ClojureRepr(Visitor):
+
+    def __init__(self):
+        super().__init__()
+        self.short_names = False  # used for debugging
 
     def visit_indent(self, node, indent=2):
         if type(indent) is int:
@@ -17,14 +21,6 @@ class ClojureRepr(Visitor):
         if result is not None:
             result = result.replace('\n', '\n'+indent)
         return result
-
-    def visit_name(self, name):
-        if type(name) is str:
-            return name
-        elif type(name) is tuple:
-            return "[{}]".format(', '.join(name))
-        else:
-            return repr(name)
 
     def visit_attribute(self, node:AstAttribute):
         base = self.visit(node.base)
@@ -53,31 +49,33 @@ class ClojureRepr(Visitor):
     def visit_compare(self, node:AstCompare):
         left = self.visit(node.left)
         right = self.visit(node.right)
+        op = '=' if node.op == '==' else node.op
         if node.second_right is not None:
             third = self.visit(node.second_right)
             if node.op == node.second_op:
-                return "({} {} {} {})".format(node.op, left, right, third)
+                return "({} {} {} {})".format(op, left, right, third)
             else:
-                return "(and ({} {} {}) ({} {} {}))".format(node.op, left, right, node.second_op, right, third)
+                return "(and ({} {} {}) ({} {} {}))".format(op, left, right, node.second_op, right, third)
         else:
-            return "({} {} {})".format(node.op, left, right)
+            return "({} {} {})".format(op, left, right)
 
     def visit_def(self, node:AstDef):
-        name = self.visit_name(node.name)
+        name = node.original_name if self.short_names else node.name
         value = self.visit_indent(node.value)
-        if '\n' not in value:
-            return "(def {} {})".format(name, value)
-        else:
+        if '\n' in value:
             return "(def {}\n  {})".format(name, value)
+        else:
+            return "(def {} {})".format(name, value)
 
     def visit_dict(self, node:AstDict):
         items = ["{} {}".format(key, node.items[key]) for key in node.items]
         return "{" + ', '.join(items) + "}"
 
     def visit_for(self, node:AstFor):
+        name = node.original_target if self.short_names else node.target
         source = self.visit(node.source)
         body = self.visit_indent(node.body)
-        return "(doseq [{}]\n  {})".format(self.visit_name(node.target), source, body)
+        return "(doseq [{} {}]\n  {})".format(name, source, body)
 
     def visit_function(self, node:AstFunction):
         params = node.parameters
@@ -110,15 +108,16 @@ class ClojureRepr(Visitor):
         return "(require '{})".format(node.module_name)
 
     def visit_let(self, node:AstLet):
-        bindings = ["{} {}".format(self.visit_name(target), self.visit_indent(source, 6))
-                    for target, source in zip(node.targets, node.sources)]
+        name = node.original_target if self.short_names else node.target
+        source = self.visit(node.source)
         body = self.visit_indent(node.body)
-        return "(let [{}]\n  {})".format('\n      '.join(bindings), body)
+        return "(let [{} {}]\n  {})".format(name, source, body)
 
     def visit_list_for(self, node:AstListFor):
+        name = node.original_target if self.short_names else node.target
         source = self.visit(node.source)
         body = self.visit_indent(node.expr)
-        return "(for {}\n  {})".format(self.visit_name(node.target), source, body)
+        return "(for [{} {}]\n  {})".format(name, source, body)
 
     def visit_observe(self, node:AstObserve):
         dist = self.visit(node.dist)
@@ -153,7 +152,7 @@ class ClojureRepr(Visitor):
         return "(get {} {})".format(sequence, index)
 
     def visit_symbol(self, node:AstSymbol):
-        return node.name
+        return node.original_name if self.short_names else node.name
 
     def visit_unary(self, node:AstUnary):
         item = self.visit(node.item)
