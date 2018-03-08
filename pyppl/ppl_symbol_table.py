@@ -4,9 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Mar 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
+from . import ppl_types, ppl_type_inference
 
 
 _symbol_counter = 1000
@@ -19,6 +20,7 @@ class Symbol(object):
         self.usage_count = 0        # type:int
         self.modify_count = 0       # type:int
         self.read_only = read_only  # type:bool
+        self.value_type = None
         self.full_name = "{}__sym_{}__".format(name, _symbol_counter)
         _symbol_counter += 1
         if missing:
@@ -32,8 +34,17 @@ class Symbol(object):
     def modify(self):
         self.modify_count += 1
 
+    def get_type(self):
+        return self.value_type
+
+    def set_type(self, tp):
+        if self.value_type is not None and tp is not None:
+            self.value_type = ppl_types.union(self.value_type, tp)
+        elif tp is not None:
+            self.value_type = tp
+
     def __repr__(self):
-        return "{}[{}/{}{}]".format(self.full_name, self.usage_count, self.modify_count, 'R' if self.read_only else '')
+        return "{}[{}/{}{}]{}".format(self.full_name, self.usage_count, self.modify_count, 'R' if self.read_only else '')
 
 
 class SymbolTableGenerator(ScopedVisitor):
@@ -52,6 +63,18 @@ class SymbolTableGenerator(ScopedVisitor):
         super().__init__()
         self.symbols = []
         self.current_lineno = None
+        self.type_inferencer = ppl_type_inference.TypeInferencer(self)
+
+    def get_type(self, node:AstNode):
+        result = self.type_inferencer.visit(node)
+        return result if result is not None else ppl_types.AnyType
+
+    def get_item_type(self, node:AstNode):
+        tp = self.get_type(node)
+        if isinstance(tp, ppl_types.SequenceType):
+            return tp.item
+        else:
+            return ppl_types.AnyType
 
     def get_symbols(self):
         for symbol in self.symbols:
@@ -64,7 +87,7 @@ class SymbolTableGenerator(ScopedVisitor):
         self.symbols.append(symbol)
         return symbol
 
-    def g_def(self, name:str, read_only:bool=False):
+    def g_def(self, name:str, read_only:bool=False, value_type=None):
         if name == '_':
             return None
         symbol = self.global_scope.resolve(name)
@@ -73,9 +96,11 @@ class SymbolTableGenerator(ScopedVisitor):
             self.global_scope.define(name, symbol)
         else:
             symbol.modify()
+        if symbol is not None and value_type is not None:
+            symbol.set_type(value_type)
         return symbol
 
-    def l_def(self, name:str, read_only:bool=False):
+    def l_def(self, name:str, read_only:bool=False, value_type=None):
         if name == '_':
             return None
         symbol = self.resolve(name)
@@ -84,6 +109,8 @@ class SymbolTableGenerator(ScopedVisitor):
             self.define(name, symbol)
         else:
             symbol.modify()
+        if symbol is not None and value_type is not None:
+            symbol.set_type(value_type)
         return symbol
 
     def use_symbol(self, name:str):
@@ -106,14 +133,14 @@ class SymbolTableGenerator(ScopedVisitor):
         if sym is not None and sym.read_only:
             raise TypeError("[line {}] cannot modify '{}'".format(self.current_lineno, node.name))
         if node.global_context:
-            self.g_def(node.name, read_only=False)
+            self.g_def(node.name, read_only=False, value_type=self.get_type(node.value))
         else:
-            self.l_def(node.name, read_only=False)
+            self.l_def(node.name, read_only=False, value_type=self.get_type(node.value))
 
     def visit_for(self, node: AstFor):
         self.visit(node.source)
         with self.create_scope():
-            self.l_def(node.target, read_only=True)
+            sym = self.l_def(node.target, read_only=True, value_type=self.get_item_type(node.source))
             self.visit(node.body)
 
     def visit_function(self, node: AstFunction):
@@ -128,13 +155,13 @@ class SymbolTableGenerator(ScopedVisitor):
     def visit_let(self, node: AstLet):
         self.visit(node.source)
         with self.create_scope():
-            self.l_def(node.target, read_only=True)
+            self.l_def(node.target, read_only=True, value_type=self.get_type(node.source))
             self.visit(node.body)
 
     def visit_list_for(self, node: AstListFor):
         self.visit(node.source)
         with self.create_scope():
-            self.l_def(node.target, read_only=True)
+            self.l_def(node.target, read_only=True, value_type=self.get_item_type(node.source))
             self.visit(node.test)
             self.visit(node.expr)
 
@@ -145,3 +172,10 @@ class SymbolTableGenerator(ScopedVisitor):
 
     def visit_while(self, node: AstWhile):
         return self.visit_node(node)
+
+
+def generate_symbol_table(ast):
+    table_generator = SymbolTableGenerator()
+    table_generator.visit(ast)
+    result = table_generator.symbols
+    return result

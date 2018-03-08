@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 19. Feb 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 class Type(object):
 
@@ -111,7 +111,7 @@ class SequenceType(Type):
 
     def __init__(self, *, name:str, base=None, item_type:Type=None, size:int=None,
                  recursive:bool=False):
-        super(SequenceType, self).__init__(name=name, base=base)
+        super().__init__(name=name, base=base)
         if recursive:
             assert(item_type is None)
             assert(size is None)
@@ -202,6 +202,18 @@ class SequenceType(Type):
         else:
             return False
 
+    def slice(self, start, stop):
+        if type(start) is int and type(stop) is int:
+            new_size = stop - start
+        elif type(start) is int and type(self.size) is int:
+            new_size = self.size - start
+        elif type(stop) is int:
+            new_size = stop
+        else:
+            new_size = None
+
+        return SequenceType(name=self.name, base=self.base, item_type=self.item_type, size=new_size)
+
     @property
     def item(self):
         return self.item_type if self.item_type is not None else AnyType
@@ -222,6 +234,7 @@ class SequenceType(Type):
 
         else:
             return None
+
 
 #######################################################################################################################
 
@@ -344,9 +357,10 @@ Float   = Type(name='Float',   base=Numeric)
 Integer = Type(name='Integer', base=Float)
 Boolean = Type(name='Boolean', base=Integer)
 
-List   = SequenceType(name='List',   base=AnyType)
-Tuple  = SequenceType(name='Tuple',  base=AnyType)
-String = SequenceType(name='String', base=AnyType, recursive=True)
+List    = SequenceType(name='List',   base=AnyType)
+Tuple   = SequenceType(name='Tuple',  base=AnyType)
+String  = SequenceType(name='String', base=AnyType, recursive=True)
+Dict    = SequenceType(name='Dict',   base=AnyType)
 
 Function = FunctionType(name='Function', base=AnyType)
 
@@ -362,7 +376,7 @@ _types = {
 }
 
 def from_python(value):
-    if value in _types:
+    if value.__hash__ is not None and value in _types:
         return _types[value]
 
     t = type(value)
@@ -381,6 +395,7 @@ def from_python(value):
         return AnyType
 
 def union(*types):
+    types = [t for t in types if t is not None]
     if len(types) > 0:
         result = types[0]
         for t in types[1:]:

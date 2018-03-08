@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -187,7 +187,7 @@ class AstNode(object):
         result = []
         for name in self.get_fields():
             item = getattr(self, name, None)
-            if isinstance(item, AstNode) or hasattr(item, '__iter__'):
+            if isinstance(item, AstNode) or type(item) in (list, tuple):
                 result.append(visitor.visit(item))
         return result
 
@@ -261,15 +261,16 @@ class Visitor(object):
     def visit(self, ast):
         if ast is None:
             return None
+        elif type(ast) in (bool, complex, float, int, str):
+            return None
         elif isinstance(ast, AstNode):
             return ast.visit(self)
         elif type(ast) is dict:
             return { key: self.visit(ast[key]) for key in ast }
+        elif type(ast) is list:
+            return [self.visit(item) for item in ast]
         elif type(ast) is tuple:
             return tuple([self.visit(item) for item in ast])
-        elif hasattr(ast, '__iter__'):
-            return [(self.visit(item) if isinstance(item, AstNode) or type(item) in [tuple, list] else item)
-                    for item in ast]
         else:
             raise TypeError("cannot walk/visit an object of type '{}'".format(type(ast)))
 
@@ -580,7 +581,7 @@ class AstCall(AstNode):
     @property
     def function_name(self):
         if isinstance(self.function, AstSymbol):
-            return self.function.name
+            return self.function.original_name
         else:
             return None
 
@@ -1358,7 +1359,7 @@ def makeListFor(target, source, expr, test=None):
     return AstListFor(target, source, expr, test)
 
 
-def makeSubscript(base, index):
+def makeSubscript(base, index, default=None):
     if type(index) is int:
         index = AstValue(index)
     if type(base) is str:
@@ -1371,7 +1372,12 @@ def makeSubscript(base, index):
         elif -len(base.items) <= i < 0:
             return base[i]
 
-    return AstSubscript(base, index)
+    elif isinstance(base, AstDict) and isinstance(index, AstValue):
+        result = base.items.get(index.value, default)
+        if result is not None:
+            return result
+
+    return AstSubscript(base, index, default)
 
 
 def makeVector(items):
@@ -1417,6 +1423,9 @@ def is_empty(node:AstNode):
         return node.value is None
     else:
         return False
+
+def is_function(node:AstNode):
+    return isinstance(node, AstFunction)
 
 def is_integer(node:AstNode):
     if isinstance(node, AstValue):

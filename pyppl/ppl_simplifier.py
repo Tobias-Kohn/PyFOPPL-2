@@ -65,6 +65,9 @@ class Simplifier(BranchScopeVisitor):
 
         return prefix, result
 
+    def visit_expr(self, node:AstNode):
+        return self.visit(node)
+
     def visit_attribute(self, node:AstAttribute):
         base = self.visit(node.base)
         if base is node.base:
@@ -203,16 +206,13 @@ class Simplifier(BranchScopeVisitor):
 
     def visit_call(self, node:AstCall):
         function = self.visit(node.function)
-        args = [self.visit(arg) for arg in node.args]
+        prefix, args = self.parse_args(node.args)
         keywords = { key:self.visit(node.keyword_args[key]) for key in node.keyword_args }
-        prefix, args = self.parse_args(args)
         if isinstance(function, AstFunction) and len(keywords) == 0 and \
                 all([not get_info(arg).has_changed_vars for arg in args]):
-            with self.create_scope(function.name):
-                for var in get_info(function.body).change_var(function.param_names).mutable_vars:
-                    self.protect(var)
-                self.define_all(function.parameters, args, vararg=function.vararg)
-                result = self.visit(function.body)
+
+            self.define_all(function.parameters, args, vararg=function.vararg)
+            result = self.visit(function.body)
 
             if get_info(result).return_count == 1:
                 if isinstance(result, AstReturn):
@@ -231,12 +231,10 @@ class Simplifier(BranchScopeVisitor):
         elif isinstance(function, AstDict):
             if len(args) != 1 or len(keywords) != 0:
                 raise TypeError("dict access requires exactly one argument ({} given)".format(len(args) + len(keywords)))
-            return self.visit(_cl(AstSubscript(function, args[0]), node))
+            return _cl(makeSubscript(function, args[0]), node)
 
         result = _cl(AstCall(function, args, keywords), node)
-        if len(prefix) > 0:
-            result = AstBody(prefix + [result])
-        return result
+        return makeBody(prefix, result)
 
     def visit_call_clojure_core_concat(self, node:AstCall):
         import itertools
@@ -299,10 +297,10 @@ class Simplifier(BranchScopeVisitor):
                 right, left = AstValue(-left.value), right.item
 
             if is_binary_add_sub(left) and is_number(right):
-                left = self.visit(AstBinary(left, '-', right))
+                left = self.visit_expr(AstBinary(left, '-', right))
                 right = AstValue(0)
             elif is_binary_add_sub(right) and is_number(left):
-                right = self.visit(AstBinary(right, '-', left))
+                right = self.visit_expr(AstBinary(right, '-', left))
                 left = AstValue(0)
 
         if is_number(left) and is_number(right):
@@ -324,26 +322,31 @@ class Simplifier(BranchScopeVisitor):
         return _cl(AstCompare(left, node.op, right, node.second_op, second_right), node)
 
     def visit_def(self, node:AstDef):
-        value = self.visit(node.value)
-        if isinstance(value, AstFunction) or get_info(value).can_embed:
-            self.define(node.name, value, globally=node.global_context)
-        else:
-            self.protect(node.name)
-        if value is not node.value:
-            return _cl(AstDef(node.name, value, global_context=node.global_context), node)
-        else:
+        if is_function(node.value):
+            self.define(node.name, node.value)
             return node
+        else:
+            value = self.visit(node.value)
+            self.define(node.name, value)
+            if value is not node.value:
+                return _cl(AstDef(node.name, value, global_context=node.global_context), node)
+            else:
+                return node
 
     def visit_dict(self, node:AstDict):
         items = { key: self.visit(node.items[key]) for key in node.items }
         return _cl(AstDict(items), node)
 
+    ###############%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%###############
+
     def visit_for(self, node:AstFor):
+        # IN ORDER TO PROCEED, WE NEED TO MAKE SURE THAT ANY IFs ARE ACTUALLY EXPANDED (see cond-expander...)
         source = self.visit(node.source)
         if is_vector(source):
             result = makeBody([AstLet(node.target, item, node.body) for item in source])
             return self.visit(_cl(result, node))
         else:
+            # HERE, WE NEED TYPE-INFERENCE AND FORCE THE UNROLLING!!!
             with self.create_scope():
                 for n in get_info(node.body).changed_vars:
                     self.protect(n)

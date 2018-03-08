@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Mar 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 
@@ -123,6 +123,7 @@ class BranchScopeVisitor(Visitor):
     def __init__(self, symbols:Optional[list]=None):
         self.branch = BranchScope(names=symbols)
         self.symbols = symbols
+        self.locked_names = set()
 
     def enter_scope(self, condition:AstNode):
         self.branch.new_branching(condition)
@@ -140,5 +141,34 @@ class BranchScopeVisitor(Visitor):
     def define(self, name:str, value):
         self.branch[name] = value
 
+    def define_all(self, names:list, values:list, *, vararg:Optional[str]=None):
+        assert type(names) is list
+        assert type(values) is list
+        assert vararg is None or type(vararg) is str
+        for name, value in zip(names, values):
+            if isinstance(name, AstSymbol):
+                name = name.name
+            if type(name) is str:
+                self.define(name, value)
+        if vararg is not None:
+            self.define(str(vararg), makeVector(values[len(names):]) if len(values) > len(names) else [])
+
     def resolve(self, name:str):
-        return self.branch[name]
+        if name not in self.locked_names:
+            return self.branch[name]
+        else:
+            return None
+
+    def lock_name(self, name:str):
+        assert type(name) is str and name != ''
+        self.locked_names.add(name)
+
+    def unlock_name(self, name:str):
+        if name in self.locked_names:
+            self.locked_names.remove(name)
+
+    def is_constant(self, name:str):
+        for sym in self.symbols:
+            if sym.name == name:
+                return sym.read_only or sym.modify_count == 0
+        return False
