@@ -47,6 +47,6 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None):
         symbol_list = []
 
     if simplify and result is not None:
-        result = ppl_simplifier.optimize(result)
+        result = ppl_simplifier.simplify(result, symbol_list)
 
     return result

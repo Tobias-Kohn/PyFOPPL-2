@@ -34,7 +34,7 @@ class BranchScope(object):
         self.condition = condition
         self.parent = parent
         self.branches = []
-        self.current_branch = None      # type:BranchScope
+        self.current_branch = self      # type:BranchScope
         if names is not None:
             self.values = { key: None for key in names }
         else:
@@ -112,18 +112,69 @@ class BranchScopeContext(object):
         self.visitor = visitor
 
     def __enter__(self):
-        return self.visitor.scope
+        return self.visitor.branch
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.visitor.leave_scope()
 
 
+class LockScope(object):
+
+    def __init__(self, prev=None):
+        self.prev = prev
+        self.names = set()
+        self.write_names = set()
+        assert prev is None or isinstance(prev, LockScope)
+
+    def lock(self, name:str):
+        if type(name) is str and name != '_' and name != '':
+            self.names.add(name)
+
+    def lock_write(self, name:str):
+        if type(name) is str and name != '_' and name != '':
+            self.write_names.add(name)
+
+    def unlock(self, name:str):
+        if name in self.names:
+            self.names.remove(name)
+        if name in self.write_names:
+            self.write_names.remove(name)
+
+    def is_locked(self, name:str):
+        if name in self.names or name in self.write_names:
+            return True
+        elif self.prev is not None:
+            return self.prev.is_locked(name)
+        else:
+            return False
+
+    def is_write_locked(self, name:str):
+        if name in self.write_names:
+            return True
+        elif self.prev is not None:
+            return self.prev.is_locked(name)
+        else:
+            return False
+
+
+class NameLockContext(object):
+
+    def __init__(self, visitor):
+        self.visitor = visitor
+
+    def __enter__(self):
+        return self.visitor.name_lock
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.visitor.leave_name_lock()
+
+
 class BranchScopeVisitor(Visitor):
 
-    def __init__(self, symbols:Optional[list]=None):
+    def __init__(self, symbols:list):
         self.branch = BranchScope(names=symbols)
         self.symbols = symbols
-        self.locked_names = set()
+        self.name_lock = LockScope()
 
     def enter_scope(self, condition:AstNode):
         self.branch.new_branching(condition)
@@ -131,15 +182,36 @@ class BranchScopeVisitor(Visitor):
     def leave_scope(self):
         self.branch.end_branching()
 
+    def enter_name_lock(self):
+        self.name_lock = LockScope(self.name_lock)
+
+    def leave_name_lock(self):
+        self.name_lock = self.name_lock.prev
+        assert isinstance(self.name_lock, LockScope)
+
     def create_scope(self, condition:AstNode):
         self.enter_scope(condition)
         return BranchScopeContext(self)
+
+    def create_lock(self, *names):
+        self.enter_name_lock()
+        for n in names:
+            self.name_lock.lock(n)
+        return NameLockContext(self)
+
+    def create_write_lock(self):
+        self.enter_name_lock()
+        self.lock_all_write()
+        return NameLockContext(self)
 
     def switch_branch(self):
         self.branch.switch_branch()
 
     def define(self, name:str, value):
-        self.branch[name] = value
+        if self.name_lock.is_write_locked(name):
+            self.name_lock.lock(name)
+        else:
+            self.branch[name] = value
 
     def define_all(self, names:list, values:list, *, vararg:Optional[str]=None):
         assert type(names) is list
@@ -154,18 +226,27 @@ class BranchScopeVisitor(Visitor):
             self.define(str(vararg), makeVector(values[len(names):]) if len(values) > len(names) else [])
 
     def resolve(self, name:str):
-        if name not in self.locked_names:
+        if not self.name_lock.is_locked(name):
             return self.branch[name]
         else:
             return None
 
+    def lock_all(self):
+        for symbol in self.symbols:
+            self.name_lock.lock(symbol.full_name)
+
+    def lock_all_write(self):
+        for symbol in self.symbols:
+            self.name_lock.lock_write(symbol.full_name)
+
     def lock_name(self, name:str):
-        assert type(name) is str and name != ''
-        self.locked_names.add(name)
+        self.name_lock.lock(name)
 
     def unlock_name(self, name:str):
-        if name in self.locked_names:
-            self.locked_names.remove(name)
+        self.name_lock.unlock(name)
+
+    def lock_name_write(self, name:str):
+        self.name_lock.lock_write(name)
 
     def is_constant(self, name:str):
         for sym in self.symbols:

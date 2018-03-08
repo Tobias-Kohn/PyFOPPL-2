@@ -4,13 +4,14 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import *
 from .ppl_evaluator import PartialEvaluator
 from ast import copy_location as _cl
 from .ppl_branch_scopes import BranchScopeVisitor
+from . import ppl_types
 
 
 # Note: Why do we need to protect all mutable variables?
@@ -41,8 +42,15 @@ def _all_instances(coll, cls):
 
 class Simplifier(BranchScopeVisitor):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, symbols:list):
+        super().__init__(symbols)
+
+    def get_type(self, node: AstNode):
+        if isinstance(node, AstSymbol):
+            symbol = self.resolve(node.name)
+            if symbol is not None:
+                return symbol.get_type()
+        return None
 
     def parse_args(self, args:list):
         can_factor_out = True
@@ -66,7 +74,8 @@ class Simplifier(BranchScopeVisitor):
         return prefix, result
 
     def visit_expr(self, node:AstNode):
-        return self.visit(node)
+        with self.create_write_lock():
+            return self.visit(node)
 
     def visit_attribute(self, node:AstAttribute):
         base = self.visit(node.base)
@@ -80,8 +89,8 @@ class Simplifier(BranchScopeVisitor):
                         node.op in ('-', '/', '//') and node.left.name == node.right.name:
             return AstValue(0 if node.op == '-' else 1)
 
-        left = node.left.visit(self)
-        right = node.right.visit(self)
+        left = self.visit(node.left)
+        right = self.visit(node.right)
         op = node.op
         if is_number(left) and is_number(right):
             return AstValue(node.op_function(left.value, right.value))
@@ -107,7 +116,7 @@ class Simplifier(BranchScopeVisitor):
                 if op in ('+', '|', '^'):
                     return right
                 elif op == '-':
-                    return _cl(AstUnary('-', right).visit(self), node)
+                    return self.visit_expr(_cl(AstUnary('-', right), node))
                 elif op in ('*', '/', '//', '%', '&', '<<', '>>', '**'):
                     return left
 
@@ -117,20 +126,20 @@ class Simplifier(BranchScopeVisitor):
 
             elif value == -1:
                 if op == '*':
-                    return _cl(AstUnary('-', right).visit(self), node)
+                    return self.visit_expr(_cl(AstUnary('-', right), node))
 
             if isinstance(right, AstBinary) and is_number(right.left):
                 r_value = right.left.value
                 if op == right.op and op in ('+', '-', '*', '&', '|'):
-                    return _cl(AstBinary(AstValue(node.op_function(value, r_value)),
+                    return self.visit_expr(_cl(AstBinary(AstValue(node.op_function(value, r_value)),
                                      '+' if op == '-' else op,
-                                     right.right).visit(self), node)
+                                     right.right), node))
 
                 elif op == right.op and op == '/':
-                    return _cl(AstBinary(AstValue(value / r_value), '*', right.right).visit(self), node)
+                    return self.visit_expr(_cl(AstBinary(AstValue(value / r_value), '*', right.right), node))
 
                 elif op in ['+', '-'] and right.op in ['+', '-']:
-                    return _cl(AstBinary(AstValue(node.op_function(value, r_value)), '-', right.right).visit(self), node)
+                    return self.visit_expr(_cl(AstBinary(AstValue(node.op_function(value, r_value)), '-', right.right), node))
 
         elif is_number(right):
             value = right.value
@@ -148,7 +157,7 @@ class Simplifier(BranchScopeVisitor):
 
             elif value == -1:
                 if op in ('*', '/'):
-                    return _cl(AstUnary('-', right).visit(self), node)
+                    return self.visit_expr(_cl(AstUnary('-', right), node))
 
             if op == '-':
                 op = '+'
@@ -162,16 +171,16 @@ class Simplifier(BranchScopeVisitor):
             if isinstance(left, AstBinary) and is_number(left.right):
                 l_value = left.right.value
                 if op == left.op and op in ('+', '*', '|', '&'):
-                    return _cl(AstBinary(left.left, op, AstValue(node.op_function(l_value, value))).visit(self), node)
+                    return self.visit_expr(_cl(AstBinary(left.left, op, AstValue(node.op_function(l_value, value))), node))
 
                 elif op == left.op and op == '-':
-                    return _cl(AstBinary(left.left, '-', AstValue(l_value + value)).visit(self), node)
+                    return self.visit_expr(_cl(AstBinary(left.left, '-', AstValue(l_value + value)), node))
 
                 elif op == left.op and op in ('/', '**'):
-                    return _cl(AstBinary(left.left, '/', AstValue(l_value * value)).visit(self), node)
+                    return self.visit_expr(_cl(AstBinary(left.left, '/', AstValue(l_value * value)), node))
 
                 elif op in ['+', '-'] and left.op in ('+', '-'):
-                    return _cl(AstBinary(left.left, left.op, AstValue(l_value - value)).visit(self), node)
+                    return self.visit_expr(_cl(AstBinary(left.left, left.op, AstValue(l_value - value)), node))
 
             if op in ('<<', '>>') and type(value) is int:
                 base = 2 if op == '<<' else 0.5
@@ -193,7 +202,7 @@ class Simplifier(BranchScopeVisitor):
                 return left if not right.value else AstValue(True)
 
         if op == '-' and isinstance(right, AstUnary) and right.op == '-':
-            return _cl(AstBinary(left, '+', right.item).visit(self), node)
+            return self.visit_expr(_cl(AstBinary(left, '+', right.item), node))
 
         if left is node.left and right is node.right:
             return node
@@ -201,7 +210,7 @@ class Simplifier(BranchScopeVisitor):
             return _cl(AstBinary(left, op, right), node)
 
     def visit_body(self, node:AstBody):
-        items = [item.visit(self) for item in node.items]
+        items = [self.visit(item) for item in node.items]
         return _cl(makeBody(items), node)
 
     def visit_call(self, node:AstCall):
@@ -337,42 +346,47 @@ class Simplifier(BranchScopeVisitor):
         items = { key: self.visit(node.items[key]) for key in node.items }
         return _cl(AstDict(items), node)
 
-    ###############%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%###############
-
     def visit_for(self, node:AstFor):
-        # IN ORDER TO PROCEED, WE NEED TO MAKE SURE THAT ANY IFs ARE ACTUALLY EXPANDED (see cond-expander...)
         source = self.visit(node.source)
         if is_vector(source):
             result = makeBody([AstLet(node.target, item, node.body) for item in source])
             return self.visit(_cl(result, node))
         else:
-            # HERE, WE NEED TYPE-INFERENCE AND FORCE THE UNROLLING!!!
-            with self.create_scope():
-                for n in get_info(node.body).changed_vars:
-                    self.protect(n)
-                self.protect(node.target)
-                body = self.visit(node.body)
-                if body is not node.body:
-                    return _cl(makeFor(node.target, source, body), node)
-        return node
+            src_type = self.get_type(source)
+            if isinstance(src_type, ppl_types.SequenceType) and src_type.size is not None:
+                result = makeBody([
+                             AstLet(node.target, makeSubscript(source, i), node.body) for i in range(src_type.size)
+                         ])
+                return self.visit(_cl(result, node))
+
+        for name in get_info(node.body).changed_vars:
+            self.lock_name(name)
+
+        body = self.visit(node.body)
+        return _cl(makeFor(node.target, source, body), node)
 
     def visit_function(self, node:AstFunction):
-        with self.create_scope(node.name):
-            for param in node.parameters:
-                self.protect(param)
-            self.protect(node.vararg)
+        with self.create_lock():
+            self.lock_all()
             body = self.visit(node.body)
-            return _cl(AstFunction(node.name, node.parameters, body,
-                                   vararg=node.vararg, doc_string=node.doc_string), node)
+            if body is not node.body:
+                return _cl(AstFunction(node.name, node.parameters, body, vararg=node.vararg,
+                                       doc_string=node.doc_string), node)
+        return node
 
     def visit_if(self, node:AstIf):
+        # Handle the case of chained conditionals, which--in Lisp--would be written using `cond`.
         cond = node.cond_tuples()
         if len(cond) > 1:
-            cond_test = [self.visit(item[0]) for item in cond]
-            cond_body = [self.visit(item[1]) for item in cond]
-            if _all_equal(cond_body):
-                return self.visit(node.if_node)
+            with self.create_write_lock():
+                cond_test = [self.visit(item[0]) for item in cond]
+                cond_body = [self.visit(item[1]) for item in cond]
 
+            # No condition needed if all options are equal
+            if _all_equal(cond_body):
+                return self.visit(makeBody(cond_test, node.if_node))
+
+            # Factor out "observe"
             if _all_instances(cond_body, AstObserve):
                 if _all_equal([x.dist for x in cond_body]):
                     return self.visit(
@@ -386,6 +400,7 @@ class Simplifier(BranchScopeVisitor):
                                    cond_body[0].value)
                     )
 
+            # Factor out a function call
             if _all_instances(cond_body, AstCall) and _all_equal(cond_body, lambda x: x.function_name) and \
                     _all_equal(cond_body, lambda x: x.arg_count) and all([not x.has_keyword_args for x in cond_body]):
                 args = [[item.args[i] for item in cond_body] for i in range(cond_body[0].arg_count)]
@@ -397,11 +412,13 @@ class Simplifier(BranchScopeVisitor):
                         new_args.append(AstIf.from_cond_tuples(list(zip(cond_test, arg))))
                 return self.visit(AstCall(cond_body[0].function, new_args))
 
+            # Factor out a definition
             if _all_instances(cond_body, AstDef) and _all_equal(cond_body, lambda x: x.name):
                 values = [item.value for item in cond_body]
                 return self.visit(AstDef(cond_body[0].name, AstIf.from_cond_tuples(list(zip(cond_test, values)))))
 
-            if (all([x.is_equality_const_test if isinstance(x, AstCompare) else False for x in cond_test]) or \
+            # Check if we can rewrite the condition as a dictionary
+            if (all([x.is_equality_const_test if isinstance(x, AstCompare) else False for x in cond_test]) or
                     (all([x.is_equality_const_test if isinstance(x, AstCompare) else False for x in cond_test[:-1]]) and
                      is_boolean_true(cond_test[-1]))) and all([get_info(x).can_embed for x in cond_body]):
                 test_vars = []
@@ -426,119 +443,102 @@ class Simplifier(BranchScopeVisitor):
                     d = AstDict({ a.value:b for a, b in zip(test_values, cond_body[:-1]) })
                     return self.visit(AstSubscript(d, AstSymbol(test_vars[0]), default=cond_body[-1]))
 
-        if node.has_else and is_unary_not(node.test):
-            test = self.visit(node.test.item)
-            else_node = self.visit(node.if_node)
-            if_node = self.visit(node.else_node)
-        else:
-            test = self.visit(node.test)
-            if_node = self.visit(node.if_node)
-            else_node = self.visit(node.else_node)
+        # Handle the common case of if/else
 
-        if else_node is not None:
-            if is_unary_not(test):
-                test = test.item
-                if_node, else_node = else_node, if_node
+        test = self.visit(node.test)
 
         if is_boolean(test):
             if test.value is True:
-                return if_node
+                return self.visit(node.if_node)
             elif test.value is False:
-                return else_node
+                return self.visit(node.else_node)
+
+        with self.create_scope(test):
+            if_node = self.visit(node.if_node)
+            self.switch_branch()
+            else_node = self.visit(node.else_node)
+
+        if is_unary_not(test) and not is_empty(else_node):
+            test = test.item
+            if_node, else_node = else_node, if_node
 
         return _cl(AstIf(test, if_node, else_node), node)
 
     def visit_let(self, node:AstLet):
-        if len(node.targets) == 1:
-            source = self.visit(node.source)
-            if node.target == '_':
-                return self.visit(_cl(AstBody(node.sources + [node.body]), node))
+        source = self.visit_expr(node.source)
+        src_info = get_info(source)
+        if isinstance(source, AstBody) and len(node.source) > 1:
+            result = _cl(makeLet(node.target, source.items[-1], node.body), node)
+            result = _cl(makeBody(source.items[:-1], result), node.source)
+            return self.visit(result)
 
-            elif isinstance(source, AstBody) and len(node.source) > 1:
-                result = _cl(AstLet(node.targets, source.items[-1], node.body), node)
-                result = _cl(AstBody(source.items[:-1] + [result]), node.source)
+        elif src_info.is_independent(get_info(node.body)):
+            self.define(node.target, self.visit(node.source))
+            return _cl(self.visit(node.body), node)
+
+        # Factor out from `let` whatever we can
+
+        if isinstance(node.body, AstBody):
+            if len(node.body) == 0:
+                return self.visit(node.source)
+            elif len(node.body) == 1:
+                return self.visit(_cl(makeLet(node.target, node.source, node.body.items[0]), node))
+
+            items = [(get_info(item), item) for item in node.body.items]
+            name = node.target
+            start = 0
+            while start < len(items) and name not in items[start][0].free_vars and src_info.is_independent(items[start][0]):
+                start += 1
+            stop = len(items)
+            while stop > 0 and name not in items[stop-1][0].free_vars:
+                stop -= 1
+
+            if start >= stop:
+                return self.visit(_cl(makeBody(node.source, node.body.items), node))
+
+            elif start > 0 or stop < len(items):
+                prefix = [item[1] for item in items[:start]]
+                suffix = [item[1] for item in items[stop:]]
+                new_body = makeBody([item[1] for item in items[start:stop]])
+                result = makeBody(prefix, _cl(makeLet(node.target, node.source, new_body), node), suffix)
                 return self.visit(result)
 
-            elif get_info(source).can_embed:
-                if node.is_single_var:
-                    with self.create_scope():
-                        self.define(node.target, self.visit(node.source))
-                        body = self.visit(node.body)
-                        return _cl(body, node)
+        # Try and simplify without expanding the let-variable
 
-                if is_vector(source) and len(source) == len(node.target):
-                    with self.create_scope():
-                        for t, v in zip(node.target, source):
-                            self.define(t, v)
-                        body = self.visit(node.body)
-                        return _cl(body, node)
-
-            if isinstance(node.body, AstBody):
-                items = [(get_info(item).free_vars, item) for item in node.body.items]
-                if len(items) == 0:
-                    return source
-
-                elif len(items) == 1:
-                    return self.visit(_cl(AstLet(node.targets, node.sources, items[0][1]), node))
-
-                elif node.is_single_var:
-                    name = node.target
-                    start = 0
-                    while start < len(items) and name not in items[start][0]:
-                        start += 1
-                    stop = len(items)
-                    while stop > 0 and name not in items[stop-1][0]:
-                        stop -= 1
-
-                    if start >= stop:
-                        return self.visit(_cl(AstBody(node.sources + node.body.items), node))
-
-                    elif start > 0 or stop < len(items):
-                        prefix = [item[1] for item in items[:start]]
-                        suffix = [item[1] for item in items[stop:]]
-                        new_body = [item[1] for item in items[start:stop]]
-                        if len(new_body) == 1:
-                            new_body = new_body[0]
-                        else:
-                            new_body = AstBody(new_body)
-                        result = AstBody(prefix + [_cl(AstLet(node.targets, node.sources, new_body), node)] + suffix)
-                        return self.visit(result)
-
-            with self.create_scope():
-                self.protect(node.target)
-                result = self.visit(node.body)
-
-            if node.is_single_var:
-                count = count_variable_usage(node.target, result)
-                if count == 0:
-                    result = AstBody(node.sources + [result])
-                    return self.visit(_cl(result, node))
-
-                elif count == 1:
-                    with self.create_scope():
-                        self.define(node.target, source)
-                        result = self.visit(result)
-                    return _cl(result, node)
-
-            return _cl(AstLet(node.targets, [source], result), node)
-
-        elif len(node.targets) > 1:
-            result = node.body
-            for target, source in zip(reversed(node.targets), reversed(node.sources)):
-                result = self.visit(_cl(AstLet([target], [source], result), node))
-            return result
-
-        return node
+        with self.create_lock(node.target):
+            source = self.visit(node.source)
+            result = self.visit(node.body)
+            return _cl(makeLet(node.target, source, result), node)
 
     def visit_list_for(self, node:AstListFor):
         source = self.visit(node.source)
-        if is_vector(source) and node.test is None:
-            if node.target == '_':
-                result = makeVector([node.expr for _ in source])
+        if is_vector(source):
+            src_len = len(source)
+        else:
+            src_type = self.get_type(source)
+            if isinstance(src_type, ppl_types.SequenceType):
+                src_len = src_type.size
             else:
-                result = makeVector([AstLet([node.target], [item], node.expr) for item in source])
-            return self.visit(_cl(result, node))
-        return node
+                src_len = None
+
+        if node.test is None:
+            if node.target == '_' and src_len is not None:
+                return self.visit(_cl(makeVector([node.expr for _ in range(src_len)]), node))
+
+            if is_vector(source):
+                result = makeVector([makeLet(node.target, item, node.expr) for item in source])
+                return self.visit(_cl(result, node))
+
+            elif src_len is not None:
+                result = makeVector([makeLet(node.target, makeSubscript(source, i), node.expr) for i in range(src_len)])
+                return self.visit(_cl(result, node))
+
+        for name in get_info(node.expr).changed_vars:
+            self.lock_name(name)
+
+        test = self.visit(node.test)
+        expr = self.visit(node.expr)
+        return _cl(AstListFor(node.target, source, expr, test), node)
 
     def visit_observe(self, node:AstObserve):
         dist = self.visit(node.dist)
@@ -553,10 +553,11 @@ class Simplifier(BranchScopeVisitor):
         if isinstance(value, AstBody):
             items = value.items
             ret = self.visit(_cl(AstReturn(items[-1]), node))
-            return _cl(AstBody(items[:-1] + [ret]), value)
+            return _cl(makeBody(items[:-1], ret), value)
         elif isinstance(value, AstLet):
-            ret = self.visit(_cl(AstReturn(value.body), node))
-            return _cl(AstLet(value.targets, value.sources, ret), value)
+            with self.create_lock(value.target):
+                ret = self.visit(_cl(AstReturn(value.body), node))
+            return _cl(makeLet(value.target, value.source, ret), value)
 
         if value is not node.value:
             return _cl(AstReturn(value), node)
@@ -612,8 +613,6 @@ class Simplifier(BranchScopeVisitor):
         return _cl(AstSubscript(base, index, default), node)
 
     def visit_symbol(self, node:AstSymbol):
-        if node.protected:
-            return node
         value = self.resolve(node.name)
         if value is not None:
             return value
@@ -621,21 +620,14 @@ class Simplifier(BranchScopeVisitor):
             return node
 
     def visit_unary(self, node:AstUnary):
-        item = node.item.visit(self)
         op = node.op
         if op == '+':
-            return item
-
-        if isinstance(item, AstUnary) and op == item.op:
-            return item.item
-
-        if is_number(item):
-            if op == '-':
-                return _cl(AstValue(-item.value), node)
+            return self.visit(node.item)
 
         if op == 'not':
+            item = node.item.visit_expr(self)
             if isinstance(item, AstCompare) and item.second_right is None:
-                return _cl(AstCompare(item.left, item.neg_op, item.right), node)
+                return self.visit(_cl(AstCompare(item.left, item.neg_op, item.right), node))
 
             if isinstance(item, AstBinary) and item.op in ('and', 'or'):
                 return self.visit(_cl(AstBinary(AstUnary('not', item.left), 'and' if item.op == 'or' else 'or',
@@ -643,6 +635,14 @@ class Simplifier(BranchScopeVisitor):
 
             if is_boolean(item):
                 return _cl(AstValue(not item.value), node)
+
+        if isinstance(node.item, AstUnary) and op == node.item.op:
+            return self.visit(node.item.item)
+
+        item = self.visit(node.item)
+        if is_number(item):
+            if op == '-':
+                return _cl(AstValue(-item.value), node)
 
         if item is node.item:
             return node
@@ -656,41 +656,18 @@ class Simplifier(BranchScopeVisitor):
         return node
 
     def visit_vector(self, node:AstVector):
-        items = [item.visit(self) for item in node.items]
-        return makeVector(items)
+        return makeVector([self.visit(item) for item in node.items])
 
     def visit_while(self, node:AstWhile):
-        test_info = get_info(node.test)
-        body_info = get_info(node.body)
-
-        with self.create_scope():
-            for n in body_info.changed_vars:
-                self.protect(n)
-            test = self.visit(node.test)
-            body = self.visit(node.body)
-
-        if len(set.intersection(test_info.free_vars, body_info.changed_vars)) == 0:
-            if is_boolean(test) and test.value is False:
-                return _cl(AstBody([]), node)
-
-            if not body_info.has_break:
-                raise SyntaxError("'while'-loop without proper termination condition: '{}'".format(node))
-
-        if test is node.test and body is node.body:
-            return node
-        else:
-            return _cl(AstWhile(test, body), node)
+        return node
 
 
-def optimize(ast):
+def simplify(ast, symbol_list):
     if type(ast) is list:
         ast = AstBody(ast)
 
-    opt = Simplifier()
-    for name in get_info(ast).mutable_vars:
-        opt.protect(name)
+    opt = Simplifier(symbol_list)
     result = opt.visit(ast)
-    result = PartialEvaluator().visit(result)
 
     if isinstance(result, AstBody):
         result = result.items

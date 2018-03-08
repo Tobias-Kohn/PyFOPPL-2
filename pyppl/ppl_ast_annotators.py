@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 08. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from .ppl_ast import *
@@ -70,6 +70,7 @@ class NodeInfo(object):
                 self.changed_var_count[key] += item.changed_var_count[key]
 
         self.has_changed_vars = len(self.changed_vars) > 0
+        self.has_free_vars = len(self.free_vars) > 0
         self.can_embed = self.is_expr and not (self.has_observe or self.has_return or self.has_sample or
                                                self.has_side_effects or self.has_changed_vars)
         self.mutable_vars = set([key for key in self.changed_var_count if self.changed_var_count[key] > 1])
@@ -142,6 +143,12 @@ class NodeInfo(object):
             raise TypeError("NodeInfo(): cannot build union with '{}'"
                             .format([item for item in other if not isinstance(item, NodeInfo)]))
 
+    def is_independent(self, other):
+        assert isinstance(other, NodeInfo)
+        a = set.intersection(self.free_vars, other.changed_vars)
+        b = set.intersection(self.changed_vars, other.free_vars)
+        c = set.intersection(self.changed_vars, other.changed_vars)
+        return len(a) == len(b) == len(c) == 0
 
 
 class InfoAnnotator(Visitor):

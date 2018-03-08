@@ -44,7 +44,7 @@ class Symbol(object):
             self.value_type = tp
 
     def __repr__(self):
-        return "{}[{}/{}{}]{}".format(self.full_name, self.usage_count, self.modify_count, 'R' if self.read_only else '')
+        return "{}[{}/{}{}]".format(self.full_name, self.usage_count, self.modify_count, 'R' if self.read_only else '')
 
 
 class SymbolTableGenerator(ScopedVisitor):
@@ -133,21 +133,32 @@ class SymbolTableGenerator(ScopedVisitor):
         if sym is not None and sym.read_only:
             raise TypeError("[line {}] cannot modify '{}'".format(self.current_lineno, node.name))
         if node.global_context:
-            self.g_def(node.name, read_only=False, value_type=self.get_type(node.value))
+            sym = self.g_def(node.name, read_only=False, value_type=self.get_type(node.value))
         else:
-            self.l_def(node.name, read_only=False, value_type=self.get_type(node.value))
+            sym = self.l_def(node.name, read_only=False, value_type=self.get_type(node.value))
+        if sym is not None:
+            node.name = sym.full_name
 
     def visit_for(self, node: AstFor):
         self.visit(node.source)
         with self.create_scope():
             sym = self.l_def(node.target, read_only=True, value_type=self.get_item_type(node.source))
+            if sym is not None:
+                node.target = sym.full_name
             self.visit(node.body)
 
     def visit_function(self, node: AstFunction):
         with self.create_scope():
-            for param in node.param_names:
-                self.l_def(param)
-                self.visit(node.body)
+            for i in range(len(node.parameters)):
+                param = node.parameters[i]
+                sym = self.l_def(param)
+                if sym is not None:
+                    node.parameters[i] = sym.full_name
+            if node.vararg is not None:
+                sym = self.l_def(node.vararg)
+                if sym is not None:
+                    node.vararg = sym.full_name
+            self.visit(node.body)
 
     def visit_import(self, node: AstImport):
         return self.visit_node(node)
@@ -155,13 +166,17 @@ class SymbolTableGenerator(ScopedVisitor):
     def visit_let(self, node: AstLet):
         self.visit(node.source)
         with self.create_scope():
-            self.l_def(node.target, read_only=True, value_type=self.get_type(node.source))
+            sym = self.l_def(node.target, read_only=True, value_type=self.get_type(node.source))
+            if sym is not None:
+                node.target = sym.full_name
             self.visit(node.body)
 
     def visit_list_for(self, node: AstListFor):
         self.visit(node.source)
         with self.create_scope():
-            self.l_def(node.target, read_only=True, value_type=self.get_item_type(node.source))
+            sym = self.l_def(node.target, read_only=True, value_type=self.get_item_type(node.source))
+            if sym is not None:
+                node.target = sym.full_name
             self.visit(node.test)
             self.visit(node.expr)
 

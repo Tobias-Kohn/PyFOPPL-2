@@ -679,6 +679,7 @@ class AstDef(AstNode):
         self.name = name
         self.value = value
         self.global_context = global_context
+        self.original_name = name
         assert type(name) is str
         assert isinstance(value, AstNode)
         assert type(global_context) is bool
@@ -722,6 +723,7 @@ class AstFor(AstControl):
         self.target = target
         self.source = source
         self.body = body
+        self.original_target = target
         assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(body, AstNode)
@@ -849,6 +851,7 @@ class AstLet(AstNode):
         self.target = target
         self.source = source
         self.body = body
+        self.original_target = target
         assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(body, AstNode)
@@ -871,6 +874,7 @@ class AstListFor(AstNode):
         self.source = source
         self.expr = expr
         self.test = test
+        self.original_target = target
         assert type(target) is str
         assert isinstance(source, AstNode)
         assert isinstance(expr, AstNode)
@@ -1319,6 +1323,10 @@ def makeIf(test, if_node, else_node):
             return if_node
         else:
             return else_node
+
+    if isinstance(if_node, AstDef) and isinstance(else_node, AstDef):
+        if if_node.name == else_node.name:
+            return AstDef(if_node.name, makeIf(test, if_node.value, else_node.value))
 
     if isinstance(test, AstSymbol) or isinstance(test, AstValue) or \
             (is_unary_not(test) and isinstance(test.item, AstSymbol)):
