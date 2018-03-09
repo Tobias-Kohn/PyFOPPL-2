@@ -50,7 +50,7 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None):
     else:
         symbol_list = []
 
-    if simplify and result is not None and False:
+    if simplify and result is not None:
         result = ppl_simplifier.simplify(result, symbol_list)
 
     return result

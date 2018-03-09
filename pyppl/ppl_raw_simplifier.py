@@ -134,20 +134,20 @@ class RawSimplifier(Visitor):
                 return _cl(makeBody(prefix, AstReturn(AstIf(test, if_node.value, else_node.value))), node)
             elif is_non_empty_body(else_node) and else_node.last_is_return:
                 tmp = generate_temp_var()
-                if_node = _cl(AstDef(tmp, if_node.value), if_node)
-                else_node = _cl(makeBody(else_node.items[-1], AstDef(tmp, else_node.items[-1].value)), else_node)
+                if_node = _cl(AstDef(tmp, if_node.value, global_context=False), if_node)
+                else_node = _cl(makeBody(else_node.items[-1], AstDef(tmp, else_node.items[-1].value, global_context=False)), else_node)
                 return _cl(makeBody(prefix, AstIf(test, if_node, else_node), AstReturn(AstSymbol(tmp))), node)
 
         elif is_non_empty_body(if_node) and if_node.last_is_return:
             if isinstance(else_node, AstReturn):
                 tmp = generate_temp_var()
-                if_node = _cl(makeBody(if_node.items[:-1], AstDef(tmp, if_node.items[-1].value)), if_node)
-                else_node = _cl(AstDef(tmp, else_node.value), else_node)
+                if_node = _cl(makeBody(if_node.items[:-1], AstDef(tmp, if_node.items[-1].value, global_context=False)), if_node)
+                else_node = _cl(AstDef(tmp, else_node.value, global_context=False), else_node)
                 return _cl(makeBody(prefix, AstIf(test, if_node, else_node), AstReturn(AstSymbol(tmp))), node)
             elif is_non_empty_body(else_node) and else_node.last_is_return:
                 tmp = generate_temp_var()
-                if_node = _cl(makeBody(if_node.items[:-1], AstDef(tmp, if_node.items[-1].value)), if_node)
-                else_node = _cl(makeBody(else_node.items[:-1], AstDef(tmp, else_node.items[-1].value)), else_node)
+                if_node = _cl(makeBody(if_node.items[:-1], AstDef(tmp, if_node.items[-1].value, global_context=False)), if_node)
+                else_node = _cl(makeBody(else_node.items[:-1], AstDef(tmp, else_node.items[-1].value, global_context=False)), else_node)
                 return _cl(makeBody(prefix, AstIf(test, if_node, else_node), AstReturn(AstSymbol(tmp))), node)
 
         if test is node.test and if_node is node.if_node and else_node is node.else_node:

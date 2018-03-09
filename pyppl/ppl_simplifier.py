@@ -210,6 +210,20 @@ class Simplifier(BranchScopeVisitor):
 
     def visit_body(self, node:AstBody):
         items = [self.visit(item) for item in node.items]
+
+        if False:
+            free_vars = [get_info(item).free_vars for item in items]
+            i = 0
+            while i < len(items):
+                item = items[i]
+                if isinstance(item, AstDef) and not item.global_context:
+                    name = items[i].name
+                    if all([name not in fv for fv in free_vars]):
+                        del items[i]
+                        del free_vars[i]
+                        continue
+                i += 1
+
         return _cl(makeBody(items), node)
 
     def visit_call(self, node:AstCall):
@@ -685,14 +699,15 @@ def simplify(ast, symbol_list):
         result = result.items
 
     # remove definitions that are no longer used
-    if type(result) in (list, tuple):
-        free_vars = [InfoAnnotator().visit(node).free_vars for node in result]
+    if type(result) is list:
+        free_vars = [get_info(node).free_vars for node in result]
         i = 0
         while i < len(result):
             if isinstance(result[i], AstDef):
                 name = result[i].name
                 if all([name not in fv for fv in free_vars]):
                     del result[i]
+                    del free_vars[i]
                     continue
             i += 1
 
