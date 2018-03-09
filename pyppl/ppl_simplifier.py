@@ -23,6 +23,9 @@ from . import ppl_types
 #   protect them, making them kind of "read-only".
 
 
+# TODO: we need proper scoping for the application of functions
+
+
 def _all_(coll, p):
     return all([p(item) for item in coll])
 
@@ -235,20 +238,22 @@ class Simplifier(BranchScopeVisitor):
 
             self.define_all(function.parameters, args, vararg=function.vararg)
             result = self.visit(function.body)
+            if function.f_locals is not None:
+                result = clean_locals(result, function.f_locals)
 
             if get_info(result).return_count == 1:
                 if isinstance(result, AstReturn):
                     result = result.value
                     result = result if result is not None else AstValue(None)
                     if len(prefix) > 0:
-                        result = AstBody(prefix + [result])
+                        result = makeBody(prefix, result)
                     return result
 
                 elif isinstance(result, AstBody) and result.last_is_return:
                     items = prefix + result.items[:-1]
                     result = result.items[-1].value
                     result = result if result is not None else AstValue(None)
-                    return AstBody(items + [result])
+                    return makeBody(items, result)
 
         elif isinstance(function, AstDict):
             if len(args) != 1 or len(keywords) != 0:
@@ -349,10 +354,24 @@ class Simplifier(BranchScopeVisitor):
             return node
         else:
             value = self.visit(node.value)
+
+            if is_non_empty_body(value):
+                items = value.items
+                prefix = []
+                while len(items) > 0 and isinstance(items[0], AstDef):
+                    prefix.append(items[0])
+                    del items[0]
+                if len(items) == 0:
+                    value = AstValue(None)
+                elif len(items) == 1:
+                    value = value.items[0]
+            else:
+                prefix = []
+
             self.define(node.name, value)
             if value is not node.value:
-                return _cl(AstDef(node.name, value, global_context=node.global_context,
-                                  original_name=node.original_name), node)
+                return _cl(makeBody(prefix, AstDef(node.name, value, global_context=node.global_context,
+                                    original_name=node.original_name)), node)
             else:
                 return node
 
@@ -686,6 +705,36 @@ class Simplifier(BranchScopeVisitor):
 
     def visit_while(self, node:AstWhile):
         return node
+
+
+def clean_locals(ast, f_locals):
+    if isinstance(ast, AstBody):
+        items = ast.items[:]
+        free_vars = [get_info(node).free_vars for node in items]
+        i = 0
+        while i < len(items):
+            if isinstance(items[i], AstDef):
+                name = items[i].name
+                if name in f_locals and all([name not in fv for fv in free_vars]):
+                    del items[i]
+                    del free_vars[i]
+                    continue
+            i += 1
+
+        if len(items) < len(ast.items):
+            return _cl(makeBody(items), ast)
+        else:
+            return ast
+
+    elif isinstance(ast, AstReturn):
+        value = clean_locals(ast.value, f_locals)
+        if value is not ast.value:
+            return _cl(AstReturn(value), ast)
+        else:
+            return ast
+
+    else:
+        return ast
 
 
 def simplify(ast, symbol_list):

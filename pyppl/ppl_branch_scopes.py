@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Mar 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 
@@ -76,8 +76,10 @@ class BranchScope(object):
         assert type(name) is str
         if name in self.values:
             return self.values[name]
-        elif self.parent is not None:
+        elif isinstance(self.parent, BranchScope):
             return self.parent.get_value(name)
+        elif isinstance(self.parent, BranchScopeVisitor):
+            return self.parent.branch.get_value(name)
         else:
             return None
 

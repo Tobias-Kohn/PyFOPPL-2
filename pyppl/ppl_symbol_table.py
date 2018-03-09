@@ -69,6 +69,12 @@ class SymbolTableGenerator(ScopedVisitor):
         result = self.type_inferencer.visit(node)
         return result if result is not None else ppl_types.AnyType
 
+    def get_full_name(self, name:str):
+        for sym in self.symbols:
+            if sym.name == name:
+                return sym.full_name
+        return name
+
     def get_item_type(self, node:AstNode):
         tp = self.get_type(node)
         if isinstance(tp, ppl_types.SequenceType):
@@ -159,7 +165,7 @@ class SymbolTableGenerator(ScopedVisitor):
                 if sym is not None:
                     node.vararg = sym.full_name
             self.visit(node.body)
-            node.f_locals = set(self.scope.bindings.keys())
+            node.f_locals = set(self.get_full_name(n) for n in self.scope.bindings.keys())
 
     def visit_import(self, node: AstImport):
         return self.visit_node(node)

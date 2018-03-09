@@ -175,6 +175,11 @@ class RawSimplifier(Visitor):
     def visit_observe(self, node: AstObserve):
         d_prefix, dist = self._visit_expr(node.dist)
         v_prefix, value = self._visit_expr(node.value)
+        # keep it from being over zealous
+        if len(d_prefix) == 1 and isinstance(d_prefix[0], AstDef) and isinstance(dist, AstSymbol) and \
+                        d_prefix[0].name == dist.name and \
+                (isinstance(d_prefix[0].value, AstCall) or isinstance(d_prefix[0], AstCallBuiltin)):
+            d_prefix, dist = [], d_prefix[0].value
         if dist is node.dist and value is node.value:
             return node
         else:
@@ -190,6 +195,11 @@ class RawSimplifier(Visitor):
 
     def visit_sample(self, node: AstSample):
         prefix, dist = self._visit_expr(node.dist)
+        # keep it from being over zealous
+        if len(prefix) == 1 and isinstance(prefix[0], AstDef) and isinstance(dist, AstSymbol) and \
+                        prefix[0].name == dist.name and \
+                (isinstance(prefix[0].value, AstCall) or isinstance(prefix[0], AstCallBuiltin)):
+            prefix, dist = [], prefix[0].value
         if dist is node.dist:
             return node
         else:
