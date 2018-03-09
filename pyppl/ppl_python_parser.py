@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 import ast
@@ -122,6 +122,12 @@ class PythonParser(ast.NodeVisitor):
             elif isinstance(target, ast.Tuple) and all([isinstance(t, ast.Name) for t in target.elts]):
                 return _cl(makeDef(tuple(t.id for t in target.elts), source), node)
 
+            elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name) and \
+                    isinstance(target.slice, ast.Index):
+                base = target.value.id
+                index = target.slice.value
+                return _cl(AstCallBuiltin('list.put', [self.visit(base), self.visit(index), source]), node)
+
         elif len(node.targets) > 1 and all(isinstance(target, ast.Name) for target in node.targets):
             result = []
             base = node.targets[-1].id
@@ -174,8 +180,14 @@ class PythonParser(ast.NodeVisitor):
             attr_name = node.func.attr
             args = [self.visit(arg) for arg in node.args]
             keywords = { kw.arg: self.visit(kw.value) for kw in node.keywords }
-            if attr_name in ['append']:
-                return _cl(AstCall(AstAttribute(AstSymbol('list'), attr_name), [attr_base] + args, keywords), node)
+            if attr_name in ['append', 'extend', 'insert', 'remove', 'index']:
+                if len(keywords) > 0:
+                    raise SyntaxError("extra keyword arguments for '{}'".format(attr_name))
+                return _cl(AstCallBuiltin('list.' + attr_name, [attr_base] + args), node)
+            elif attr_name in ['get', 'keys', 'items', 'values', 'update']:
+                if len(keywords) > 0:
+                    raise SyntaxError("extra keyword arguments for '{}'".format(attr_name))
+                return _cl(AstCallBuiltin('dict.' + attr_name, [attr_base] + args), node)
             return _cl(AstCall(AstAttribute(attr_base, attr_name), args, keywords), node)
 
         elif isinstance(node.func, ast.Name):
@@ -188,6 +200,10 @@ class PythonParser(ast.NodeVisitor):
             elif name == 'observe':
                 _check_arg_arity(name, args, 2)
                 result = AstObserve(args[0], args[1])
+            elif name in ('len', 'map', 'max', 'min', 'range', 'reversed', 'sorted', 'sum', 'zip'):
+                if len(keywords) > 0:
+                    raise SyntaxError("extra keyword arguments for '{}'".format(name))
+                result = AstCallBuiltin(name, args)
             else:
                 result = AstCall(AstSymbol(name), args, keywords)
             return _cl(result, node)

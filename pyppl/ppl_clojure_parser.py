@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_clojure_forms as clj
@@ -15,11 +15,15 @@ from .ppl_clojure_lexer import ClojureLexer
 class ClojureParser(clj.Visitor):
 
     __core_functions__ = {
+        'append',
         'concat',
         'conj',
         'cons',
+        'filter',
+        'interleave',
         'into',
         'map',
+        'prepend',
         'reduce',
     }
 
@@ -221,8 +225,8 @@ class ClojureParser(clj.Visitor):
         return makeLet(targets, sources, self.parse_body(body))
 
     def visit_nth(self, sequence, index):
-        sequence = sequence.visit(self)
-        index = index.visit(self)
+        sequence = self.visit(sequence)
+        index = self.visit(index)
         if isinstance(sequence, AstSlice) and sequence.stop is None and is_integer(index):
             start = sequence.start_as_int
             if start is not None:
@@ -231,6 +235,12 @@ class ClojureParser(clj.Visitor):
 
     def visit_observe(self, dist, value):
         return AstObserve(dist.visit(self), value.visit(self))
+
+    def visit_put(self, sequence, index, value):
+        sequence = self.visit(sequence)
+        index = self.visit(index)
+        value = self.visit(value)
+        return AstCallBuiltin('list.put', [sequence, index, value])
 
     def visit_repeat(self, count, value):
         value = value.visit(self)

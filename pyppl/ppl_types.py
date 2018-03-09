@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 class Type(object):
 
@@ -103,6 +103,9 @@ class Type(object):
     def __pos__(self):
         from . import ppl_type_operations
         return ppl_type_operations.pos(self)
+
+    def __pow__(self, power, modulo=None):
+        return self
 
 
 #######################################################################################################################

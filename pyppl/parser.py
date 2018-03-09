@@ -4,10 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 07. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 from typing import Optional
-from . import ppl_foppl_parser, ppl_clojure_parser, ppl_python_parser, ppl_simplifier, ppl_symbol_table
+from . import ppl_foppl_parser, ppl_clojure_parser, ppl_python_parser, ppl_symbol_table
+from . import ppl_simplifier, ppl_raw_simplifier
 
 def _detect_language(s:str):
     for char in s:
@@ -39,6 +40,9 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None):
         elif lang == 'foppl':
             result = ppl_foppl_parser.parse(source)
 
+    if simplify and result is not None:
+        result = ppl_raw_simplifier.RawSimplifier().visit(result)
+
     if result is not None:
         symbol_table = ppl_symbol_table.SymbolTableGenerator()
         symbol_table.visit(result)
@@ -46,7 +50,7 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None):
     else:
         symbol_list = []
 
-    if simplify and result is not None:
+    if simplify and result is not None and False:
         result = ppl_simplifier.simplify(result, symbol_list)
 
     return result

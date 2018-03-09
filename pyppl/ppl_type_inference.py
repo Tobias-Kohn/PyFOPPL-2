@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_types import *
@@ -131,7 +131,7 @@ class TypeInferencer(Visitor):
         if node.op == 'not':
             return Boolean
         else:
-            return node.item.get_type()
+            return self.visit(node.item)
 
     def visit_value(self, node: AstValue):
         return from_python(node.value)

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -570,9 +570,9 @@ class AstCall(AstNode):
             name = 'visit_call_' + name
             for ch in ('+', '-', '.', '/', '*'):
                 name = name.replace(ch, '_')
-            return [name] + super(AstCall, self).get_visitor_names()
+            return [name] + super().get_visitor_names()
         else:
-            return super(AstCall, self).get_visitor_names()
+            return super().get_visitor_names()
 
     @property
     def arg_count(self):
@@ -599,6 +599,41 @@ class AstCall(AstNode):
                 if key not in node or self.keyword_args[key] != node.keyword_args[key]:
                     return False
             return True
+        else:
+            return False
+
+
+class AstCallBuiltin(AstNode):
+
+    def __init__(self, function:str, args:list, is_pure:bool=True):
+        self.function_name = function
+        self.args = args
+        self.is_pure = is_pure
+        assert type(self.function_name) is str
+        assert all([isinstance(arg, AstNode) for arg in self.args])
+        assert type(self.is_pure) is bool
+
+    def __repr__(self):
+        args = [repr(arg) for arg in self.args]
+        return "{}({})".format(self.function_name, ', '.join(args))
+
+    def get_visitor_names(self):
+        name = 'visit_call_' + self.function_name
+        for ch in ('+', '-', '.', '/', '*'):
+            name = name.replace(ch, '_')
+        return [name, 'visit_builtin'] + super().get_visitor_names()
+
+    @property
+    def arg_count(self):
+        return len(self.args)
+
+    @property
+    def function(self):
+        return AstSymbol(self.function_name)
+
+    def equals(self, node):
+        if self.function_name == node.function_name and self.arg_count == node.arg_count:
+            return all([a == b for a, b in zip(self.args, node.args)])
         else:
             return False
 
@@ -709,6 +744,9 @@ class AstDict(AstNode):
         items = ["{}: {}".format(key, repr(self.items[key])) for key in self.items]
         return "{" + (', '.join(items)) + "}"
 
+    def __len__(self):
+        return len(self.items)
+
     def equals(self, node):
         if len(self.items) == len(node.items):
             for key in self.items:
@@ -737,20 +775,24 @@ class AstFor(AstControl):
 class AstFunction(AstNode):
 
     def __init__(self, name:Optional[str], parameters:list, body:AstNode, *, vararg:Optional[str]=None,
-                 doc_string:Optional[str]=None):
+                 doc_string:Optional[str]=None, f_locals:Optional[set]=None):
         if name is None:
             name = '__lambda__'
+        if f_locals is None:
+            f_locals = set()
         self.name = name
         self.parameters = parameters
         self.body = body
         self.vararg = vararg
         self.doc_string = doc_string
         self.param_names = set(parameters + [vararg] if vararg is not None else parameters)
+        self.f_locals = f_locals
         assert type(name) is str and name != ''
         assert type(parameters) is list and all([type(p) is str for p in parameters])
         assert isinstance(body, AstNode)
         assert vararg is None or type(vararg) is str
         assert doc_string is None or type(doc_string) is str
+        assert type(f_locals) is set and all([type(n) is str for n in f_locals])
 
     def __repr__(self):
         params = self.parameters
@@ -1272,7 +1314,7 @@ def makeBody(*items):
 
 def makeDef(target, value:AstNode, is_global:bool=False):
     if type(target) is str:
-        return AstDef(target, value)
+        return AstDef(target, value, global_context=is_global)
 
     elif type(target) is tuple and all(type(t) is str for t in target):
         tmp = generate_temp_var()
@@ -1398,6 +1440,14 @@ def makeVector(items):
 
 #######################################################################################################################
 
+def has_return(node:AstNode):
+    if isinstance(node, AstReturn):
+        return True
+    elif isinstance(node, AstBody):
+        return has_return(node[-1]) if len(node) > 0 else False
+    else:
+        return False
+
 def is_binary_add_sub(node:AstNode):
     if isinstance(node, AstBinary):
         return node.op in ['+', '-']
@@ -1454,6 +1504,12 @@ def is_negation_of(nodeA:AstNode, nodeB:AstNode):
 def is_none(node:AstNode):
     if isinstance(node, AstValue):
         return node.value is None
+    else:
+        return False
+
+def is_non_empty_body(node:AstNode):
+    if isinstance(node, AstBody):
+        return len(node) > 0
     else:
         return False
 

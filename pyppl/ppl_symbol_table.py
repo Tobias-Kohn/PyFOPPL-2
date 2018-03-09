@@ -159,6 +159,7 @@ class SymbolTableGenerator(ScopedVisitor):
                 if sym is not None:
                     node.vararg = sym.full_name
             self.visit(node.body)
+            node.f_locals = set(self.scope.bindings.keys())
 
     def visit_import(self, node: AstImport):
         return self.visit_node(node)

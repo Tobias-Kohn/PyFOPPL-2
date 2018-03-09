@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 09. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from .ppl_ast_annotators import *
@@ -372,7 +372,7 @@ class Simplifier(BranchScopeVisitor):
             body = self.visit(node.body)
             if body is not node.body:
                 return _cl(AstFunction(node.name, node.parameters, body, vararg=node.vararg,
-                                       doc_string=node.doc_string), node)
+                                       doc_string=node.doc_string, f_locals=node.f_locals), node)
         return node
 
     def visit_if(self, node:AstIf):
@@ -637,7 +637,7 @@ class Simplifier(BranchScopeVisitor):
             return self.visit(node.item)
 
         if op == 'not':
-            item = node.item.visit_expr(self)
+            item = node.item._visit_expr(self)
             if isinstance(item, AstCompare) and item.second_right is None:
                 return self.visit(_cl(AstCompare(item.left, item.neg_op, item.right), node))
 
