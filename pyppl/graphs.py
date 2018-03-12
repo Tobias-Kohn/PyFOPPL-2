@@ -64,10 +64,7 @@ class GraphNode(object):
     def __repr__(self):
         return self.create_repr(self.name)
 
-    def gen_log_pdf_code(self, state_object: Optional[str]=None):
-        raise NotImplemented
-
-    def gen_sampling_code(self, state_object: Optional[str]=None):
+    def get_code(self):
         raise NotImplemented
 
 
@@ -104,6 +101,9 @@ class ConditionNode(GraphNode):
         result = self.cond_code
         return "{} = {}".format(target, result)
 
+    def get_code(self):
+        return self.cond_code
+
 
 class DataNode(GraphNode):
     """
@@ -129,6 +129,9 @@ class DataNode(GraphNode):
         target = target.format(self.name)
         result = self.data_code
         return "{} = {}".format(target, result)
+
+    def get_code(self):
+        return self.data_code
 
 
 class Vertex(GraphNode):
@@ -197,4 +200,7 @@ class Vertex(GraphNode):
         target = "{}" if state_object is None else state_object + "['{}']"
         target = target.format(self.name)
         result = self.dist_code
-        return "{}_dist = {}\n{} = {}_dist.sample()".format(self.name, result, self.name, target)
+        return "{}_dist = {}\n{} = {}_dist.sample()".format(self.name, result, target, self.name)
+
+    def get_code(self):
+        return self.dist_code

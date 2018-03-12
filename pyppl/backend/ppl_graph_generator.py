@@ -230,8 +230,5 @@ class GraphGenerator(ScopedVisitor):
         result = makeVector(items)
         return result, parents
 
-    def generate_log_pdf_code(self):
-        return self.factory.generate_log_pdf_code()
-
-    def generate_sampling_code(self):
-        return self.factory.generate_sampling_code()
+    def generate_code(self, model_template: str = None):
+        return self.factory.generate_code(model_template=model_template)
