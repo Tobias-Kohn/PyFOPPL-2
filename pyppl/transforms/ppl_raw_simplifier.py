@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 09. Mar 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 12. Mar 2018, Tobias Kohn
 #
 from ast import copy_location as _cl
 from pyppl.ppl_ast import *
@@ -61,13 +61,14 @@ class RawSimplifier(Visitor):
 
     def visit_call(self, node: AstCall):
         if node.arg_count > 0:
+            function = self.visit(node.function)
             prefix = []
             args = []
             for arg in node.args:
                 p, a = self._visit_expr(arg)
                 prefix += p
                 args.append(a)
-            return _cl(makeBody(prefix, AstCall(node.function, args, node.keyword_args)), node)
+            return _cl(makeBody(prefix, AstCall(function, args, node.keyword_args)), node)
         else:
             return node
 
@@ -224,6 +225,11 @@ class RawSimplifier(Visitor):
         else:
             prefix = base_prefix + index_prefix
             return _cl(makeBody(prefix, makeSubscript(base, index)), node)
+
+    def visit_symbol(self, node: AstSymbol):
+        if node.original_name in ('normal', 'categorical', 'dirichlet'):
+            node.predef = True
+        return node
 
     def visit_unary(self, node: AstUnary):
         # when applying an unary operator twice, it usually cancels, so we can get rid of it entirely

@@ -278,7 +278,7 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_symbol(self, node: AstSymbol):
         if self.short_names:
-            if self.state_object is not None:
+            if self.state_object is not None and not node.predef:
                 return "{}['{}']".format(self.state_object, node.original_name)
             else:
                 return node.original_name
@@ -287,7 +287,7 @@ class CodeGenerator(ScopedVisitor):
             name = _normalize_name(sym.name)
         else:
             name = _normalize_name(node.name)
-        if self.state_object is not None:
+        if self.state_object is not None and not node.predef:
             name = "{}['{}']".format(self.state_object, name)
         return name
 
@@ -309,7 +309,7 @@ class CodeGenerator(ScopedVisitor):
         return "while {}:\n\t{}".format(test, body)
 
 
-def generate_code(ast, *, code_generator=None, name=None, parameters=None):
+def generate_code(ast, *, code_generator=None, name=None, parameters=None, state_object=None):
     if code_generator is not None:
         if callable(code_generator):
             cg = code_generator()
@@ -317,6 +317,8 @@ def generate_code(ast, *, code_generator=None, name=None, parameters=None):
             cg = code_generator
     else:
         cg = CodeGenerator()
+    if state_object is not None:
+        cg.state_object = state_object
 
     result = cg.visit(ast)
     if type(result) is list:

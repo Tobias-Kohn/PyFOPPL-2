@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Mar 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 12. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_types, ppl_type_inference
@@ -188,9 +188,10 @@ class SymbolTableGenerator(ScopedVisitor):
             self.visit(node.expr)
 
     def visit_symbol(self, node: AstSymbol):
-        symbol = self.use_symbol(node.original_name)
-        node.symbol = symbol
-        node.name = symbol.full_name
+        if not node.predef:
+            symbol = self.use_symbol(node.original_name)
+            node.symbol = symbol
+            node.name = symbol.full_name
 
     def visit_while(self, node: AstWhile):
         return self.visit_node(node)

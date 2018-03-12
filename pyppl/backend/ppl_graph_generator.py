@@ -10,12 +10,56 @@ from pyppl.ppl_ast import *
 from .ppl_graph_factory import GraphFactory
 
 
+class ConditionScope(object):
+
+    def __init__(self, prev, condition: AstNode):
+        self.prev = prev
+        self.condition = condition
+        self.truth_value = True
+
+    def switch_branch(self):
+        if is_unary_not(self.condition):
+            self.condition = self.condition.item
+        elif isinstance(self.condition, AstNode):
+            self.condition = AstUnary('not', self.condition)
+        else:
+            self.truth_value = not self.truth_value
+
+
+class ConditionScopeContext(object):
+
+    def __init__(self, visitor):
+        self.visitor = visitor
+
+    def __enter__(self):
+        return self.visitor.conditions
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.visitor.leave_condition()
+
+
 class GraphGenerator(ScopedVisitor):
 
     def __init__(self, factory: GraphFactory):
         super().__init__()
+        if factory is None:
+            factory = GraphFactory()
         self.factory = factory
         self.nodes = []
+        self.conditions = None  # type: ConditionScope
+
+    def enter_condition(self, condition):
+        self.conditions = ConditionScope(self.conditions, condition)
+
+    def leave_condition(self):
+        self.conditions = self.conditions.prev
+
+    def switch_condition(self):
+        self.conditions.switch_branch()
+
+    def create_condition(self, condition):
+        self.enter_condition(condition)
+        return ConditionScopeContext(self)
 
     def _visit_dict(self, items):
         result = {}
@@ -86,12 +130,22 @@ class GraphGenerator(ScopedVisitor):
 
     def visit_if(self, node: AstIf):
         test, parents = self.visit(node.test)
-        _ = self.factory.create_condition_node(node.test, parents)
+        cond_node = self.factory.create_condition_node(test, parents)
+        if cond_node is not None:
+            self.nodes.append(cond_node)
+            name = getattr(cond_node, 'name', 'cond_???')
+            test = AstSymbol(name, node=cond_node)
 
-        # TODO: implement
-        return self.visit_node(node)
+        with self.create_condition(cond_node):
+            a_node, a_parents = self.visit(node.if_node)
+            parents = set.union(parents, a_parents)
+            self.switch_condition()
+            b_node, b_parents = self.visit(node.else_node)
+            parents = set.union(parents, b_parents)
 
-    def visit_import(self, node: AstImport):
+        return AstIf(test, a_node, b_node), parents
+
+    def visit_import(self, _):
         return AstValue(None), set()
 
     def visit_let(self, node: AstLet):
@@ -123,7 +177,7 @@ class GraphGenerator(ScopedVisitor):
         node = self.factory.create_sample_node(dist, parents)
         name = getattr(node, 'name', 'x???')
         self.nodes.append(node)
-        return AstSymbol(name, node=node), set(node)
+        return AstSymbol(name, node=node), { node }
 
     def visit_slice(self, node: AstSlice):
         base, parents = self.visit(node.base)
@@ -142,6 +196,8 @@ class GraphGenerator(ScopedVisitor):
     def visit_subscript(self, node: AstSubscript):
         base, b_parents = self.visit(node.base)
         index, i_parents = self.visit(node.index)
+        if is_vector(base) and is_integer(index):
+            return self.visit(base[index.value])
         return makeSubscript(base, index), set.union(b_parents, i_parents)
 
     def visit_symbol(self, node: AstSymbol):
@@ -149,7 +205,7 @@ class GraphGenerator(ScopedVisitor):
         if item is not None:
             return item
         elif node.node is not None:
-            return node, set(node.node)
+            return node, { node.node }
         else:
             raise RuntimeError("symbol not found: '{}'".format(node.original_name))
 
@@ -164,7 +220,7 @@ class GraphGenerator(ScopedVisitor):
         if len(node) > 3:
             node = self.factory.create_data_node(node, set())
             if node is not None:
-                name = getattr(node, 'name', 'd???')
+                name = getattr(node, 'name', 'data_???')
                 self.nodes.append(node)
                 return AstSymbol(name, node=node), set()
         return node, set()
@@ -172,10 +228,10 @@ class GraphGenerator(ScopedVisitor):
     def visit_vector(self, node: AstVector):
         items, parents = self._visit_items(node.items)
         result = makeVector(items)
-        if is_vector(result) and len(result) > 3:
-            node = self.factory.create_data_node(result, parents)
-            if node is not None:
-                name = getattr(node, 'name', 'd???')
-                self.nodes.append(node)
-                return AstSymbol(name, node=node), parents
         return result, parents
+
+    def generate_log_pdf_code(self):
+        return self.factory.generate_log_pdf_code()
+
+    def generate_sampling_code(self):
+        return self.factory.generate_sampling_code()

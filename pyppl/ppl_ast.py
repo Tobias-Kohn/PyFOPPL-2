@@ -1031,16 +1031,18 @@ class AstSubscript(AstNode):
 
 class AstSymbol(AstLeaf):
 
-    def __init__(self, name:str, import_source:Optional[str]=None, protected:bool=False, node=None):
+    def __init__(self, name:str, import_source:Optional[str]=None, protected:bool=False, node=None, predef=False):
         self.name = name
         self.import_source = import_source
         self.protected = protected
         self.original_name = name
         self.symbol = None
         self.node = node
+        self.predef = predef
         assert type(name) is str
         assert import_source is None or type(import_source) is str
         assert type(protected) is bool
+        assert type(self.predef) is bool
 
     def __repr__(self):
         return self.name
