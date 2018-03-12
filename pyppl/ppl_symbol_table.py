@@ -65,11 +65,14 @@ class SymbolTableGenerator(ScopedVisitor):
     without worrying about correct scoping (the scoping is taken care of here).
     """
 
-    def __init__(self):
+    def __init__(self, namespace: Optional[dict]=None):
         super().__init__()
+        if namespace is None:
+            namespace = {}
         self.symbols = []
         self.current_lineno = None
         self.type_inferencer = ppl_type_inference.TypeInferencer(self)
+        self.namespace = namespace
 
     def get_type(self, node:AstNode):
         result = self.type_inferencer.visit(node)
@@ -211,6 +214,9 @@ class SymbolTableGenerator(ScopedVisitor):
             self.visit(node.expr)
 
     def visit_symbol(self, node: AstSymbol):
+        if node.original_name in self.namespace:
+            node.name = self.namespace[node.original_name]
+            node.original_name = node.name
         if not node.predef:
             symbol = self.use_symbol(node.original_name)
             node.symbol = symbol

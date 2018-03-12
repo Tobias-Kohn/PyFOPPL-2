@@ -33,7 +33,7 @@ def _detect_language(s:str):
     return None
 
 
-def parse(source:str, *, simplify:bool=True, language:Optional[str]=None):
+def parse(source:str, *, simplify:bool=True, language:Optional[str]=None, namespace:Optional[dict]=None):
     result = None
     if type(source) is str and str != '':
         lang = _detect_language(source) if language is None else language.lower()
@@ -50,7 +50,7 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None):
         result = ppl_raw_simplifier.RawSimplifier().visit(result)
 
     if result is not None:
-        symbol_table = ppl_symbol_table.SymbolTableGenerator()
+        symbol_table = ppl_symbol_table.SymbolTableGenerator(namespace=namespace)
         symbol_table.visit(result)
         symbol_list = symbol_table.get_symbols()
     else:
