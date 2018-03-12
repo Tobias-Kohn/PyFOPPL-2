@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 12. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -1031,12 +1031,13 @@ class AstSubscript(AstNode):
 
 class AstSymbol(AstLeaf):
 
-    def __init__(self, name:str, import_source:Optional[str]=None, protected:bool=False):
+    def __init__(self, name:str, import_source:Optional[str]=None, protected:bool=False, node=None):
         self.name = name
         self.import_source = import_source
         self.protected = protected
         self.original_name = name
         self.symbol = None
+        self.node = node
         assert type(name) is str
         assert import_source is None or type(import_source) is str
         assert type(protected) is bool

@@ -6,9 +6,10 @@
 # 20. Feb 2018, Tobias Kohn
 # 27. Feb 2018, Tobias Kohn
 #
-from . import ppl_clojure_forms as clj
-from . import lexer
-from .lexer import CatCode, TokenType
+from pyppl import lexer
+from pyppl.fe_clojure import ppl_clojure_forms as clj
+from pyppl.lexer import CatCode, TokenType
+
 
 #######################################################################################################################
 

@@ -6,11 +6,11 @@
 # 22. Feb 2018, Tobias Kohn
 # 09. Mar 2018, Tobias Kohn
 #
-from .ppl_ast import *
-from .ppl_ast_annotators import *
+from pyppl.ppl_ast import *
+from pyppl.ppl_ast_annotators import *
 from ast import copy_location as _cl
-from .ppl_branch_scopes import BranchScopeVisitor
-from . import ppl_types
+from pyppl.ppl_branch_scopes import BranchScopeVisitor
+from pyppl import ppl_types
 
 
 # Note: Why do we need to protect all mutable variables?

@@ -7,7 +7,7 @@
 # 09. Mar 2018, Tobias Kohn
 #
 from ast import copy_location as _cl
-from .ppl_ast import *
+from pyppl.ppl_ast import *
 
 class RawSimplifier(Visitor):
 

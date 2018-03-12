@@ -4,11 +4,17 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 12. Mar 2018, Tobias Kohn
 #
 from typing import Optional
-from . import ppl_foppl_parser, ppl_clojure_parser, ppl_python_parser, ppl_symbol_table
-from . import ppl_simplifier, ppl_raw_simplifier
+
+from pyppl.transforms import ppl_simplifier
+from pyppl.transforms import ppl_raw_simplifier
+from . import ppl_symbol_table
+from .fe_clojure import ppl_clojure_parser
+from .fe_clojure import ppl_foppl_parser
+from .fe_python import ppl_python_parser
+
 
 def _detect_language(s:str):
     for char in s:

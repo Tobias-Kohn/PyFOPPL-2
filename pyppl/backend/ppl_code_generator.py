@@ -4,10 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 02. Mar 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 12. Mar 2018, Tobias Kohn
 #
-from .ppl_ast import *
-from .ppl_ast_annotators import get_info
+from pyppl.ppl_ast import *
+from pyppl.ppl_ast_annotators import get_info
 
 
 def _is_block(node):
@@ -86,8 +86,17 @@ class CodeGenerator(ScopedVisitor):
     def __init__(self):
         super().__init__()
         self.functions = []
+        self.imports = []
         self._symbol_counter_ = 99
         self.short_names = False        # used for debugging
+        self.state_object = None        # type:str
+
+    def get_prefix(self):
+        import datetime
+        result = ['# {}'.format(datetime.datetime.now()),
+                  '\n'.join(self.imports),
+                  '\n\n'.join(self.functions)]
+        return '\n\n'.join(result)
 
     def generate_symbol(self):
         self._symbol_counter_ += 1
@@ -137,6 +146,8 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_def(self, node: AstDef):
         name = _normalize_name(node.original_name if self.short_names else node.name)
+        if self.state_object is not None:
+            name = "{}['{}']".format(self.state_object, name)
         if isinstance(node.value, AstFunction):
             function = node.value
             params = function.parameters
@@ -205,11 +216,13 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_import(self, node: AstImport):
         if node.imported_names is None:
-            return "import {}{}".format(node.module_name, "as {}".format(node.alias) if node.alias is not None else '')
+            result = "import {}{}".format(node.module_name, "as {}".format(node.alias) if node.alias is not None else '')
         elif len(node.imported_names) == 1 and node.alias is not None:
-            return "from {} import {} as {}".format(node.module_name, node.imported_names[0], node.alias)
+            result = "from {} import {} as {}".format(node.module_name, node.imported_names[0], node.alias)
         else:
-            return "from {} import {}".format(node.module_name, ', '.join(node.imported_names))
+            result = "from {} import {}".format(node.module_name, ', '.join(node.imported_names))
+        self.imports.append(result)
+        return ""
 
     def visit_let(self, node: AstLet):
         name = _normalize_name(node.original_target if self.short_names else node.target)
@@ -265,12 +278,18 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_symbol(self, node: AstSymbol):
         if self.short_names:
-            return node.original_name
+            if self.state_object is not None:
+                return "{}['{}']".format(self.state_object, node.original_name)
+            else:
+                return node.original_name
         sym = self.resolve(node.name)
         if isinstance(sym, AstSymbol):
-            return _normalize_name(sym.name)
+            name = _normalize_name(sym.name)
         else:
-            return _normalize_name(node.name)
+            name = _normalize_name(node.name)
+        if self.state_object is not None:
+            name = "{}['{}']".format(self.state_object, name)
+        return name
 
     def visit_unary(self, node: AstUnary):
         return "{}{}".format(node.op, self.visit(node.item))
@@ -301,11 +320,10 @@ def generate_code(ast, *, code_generator=None, name=None, parameters=None):
 
     result = cg.visit(ast)
     if type(result) is list:
-        result = cg.functions + result
+        result = [cg.get_prefix()] + result
         result = '\n\n'.join(result)
     elif len(cg.functions) > 0:
-        result = cg.functions + [result]
-        result = '\n\n'.join(result)
+        result = cg.get_prefix() + '\n\n' + result
 
     if name is not None:
         assert type(name) is str, "name must be a string"

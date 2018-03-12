@@ -6,9 +6,10 @@
 # 20. Feb 2018, Tobias Kohn
 # 09. Mar 2018, Tobias Kohn
 #
-from .ppl_ast import *
-from . import ppl_clojure_forms as clj
+from pyppl.fe_clojure import ppl_clojure_forms as clj
+from pyppl.ppl_ast import *
 from .ppl_clojure_lexer import ClojureLexer
+
 
 #######################################################################################################################
 
