@@ -4,14 +4,15 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 12. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from pyppl.ppl_ast_annotators import *
 from ast import copy_location as _cl
 from pyppl.ppl_branch_scopes import BranchScopeVisitor
 from pyppl import ppl_types
-
+from pyppl import ppl_namespaces
+import math
 
 # Note: Why do we need to protect all mutable variables?
 #   During the optimisation, we regularly visit a part of the AST multiple times, and we might even visit a part of
@@ -81,6 +82,11 @@ class Simplifier(BranchScopeVisitor):
 
     def visit_attribute(self, node:AstAttribute):
         base = self.visit(node.base)
+        if isinstance(base, AstSymbol):
+            ns = self.resolve(base.name)
+            if isinstance(ns, AstNamespace):
+                return self.visit(ns[node.attr])
+
         if base is node.base:
             return node
         else:
@@ -263,6 +269,19 @@ class Simplifier(BranchScopeVisitor):
         result = _cl(AstCall(function, args, keywords), node)
         return makeBody(prefix, result)
 
+    def visit_call_abs(self, node: AstCallBuiltin):
+        if node.arg_count == 1 and not node.has_keyword_args:
+            arg = self.visit_expr(node.args[0])
+            if isinstance(arg, AstValue):
+                return _cl(AstValue(abs(arg.value)), node)
+
+        return self.visit_call_builtin(node)
+
+    def visit_call_builtin(self, node: AstCallBuiltin):
+        prefix, args = self.parse_args(node.args)
+        result = _cl(AstCallBuiltin(node.function_name, args), node)
+        return makeBody(prefix, result)
+
     def visit_call_clojure_core_concat(self, node:AstCall):
         import itertools
         if len(node.keyword_args) == 0:
@@ -297,6 +316,14 @@ class Simplifier(BranchScopeVisitor):
                 for arg in reversed(args[:-1]):
                     sequence = sequence.cons(arg)
                 return sequence
+        return self.visit_call(node)
+
+    def visit_call_math_sqrt(self, node: AstCall):
+        if node.arg_count == 1 and not node.has_keyword_args:
+            value = self.visit_expr(node.args[0])
+            if isinstance(value, AstValue):
+                return _cl(AstValue(math.sqrt(value.value)), node)
+
         return self.visit_call(node)
 
     def visit_call_range(self, node:AstCall):
@@ -497,6 +524,22 @@ class Simplifier(BranchScopeVisitor):
             if_node, else_node = else_node, if_node
 
         return _cl(AstIf(test, if_node, else_node), node)
+
+    def visit_import(self, node: AstImport):
+        module_name, names = ppl_namespaces.namespace_from_module(node.module_name)
+        if node.imported_names is not None:
+            if node.alias is None:
+                for name in node.imported_names:
+                    self.define(name, AstSymbol("{}.{}".format(module_name, name), predef=True))
+            else:
+                self.define(node.alias, AstSymbol("{}.{}".format(module_name, node.imported_names[0]), predef=True))
+
+        else:
+            bindings = { key: AstSymbol("{}.{}".format(module_name, key), predef=True) for key in names }
+            ns = AstNamespace(module_name, bindings)
+            self.define(node.module_name, ns)
+
+        return _cl(AstImport(module_name), node)
 
     def visit_let(self, node:AstLet):
         source = self.visit_expr(node.source)

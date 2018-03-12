@@ -46,6 +46,10 @@ class ClojureRepr(Visitor):
             args.extend(kw_args)
         return "({} {})".format(function, ' '.join(args))
 
+    def visit_call_builtin(self, node:AstCallBuiltin):
+        args = [self.visit(item) for item in node.args]
+        return "({} {})".format(node.function_name, ' '.join(args))
+
     def visit_compare(self, node:AstCompare):
         left = self.visit(node.left)
         right = self.visit(node.right)

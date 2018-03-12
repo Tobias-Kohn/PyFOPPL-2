@@ -78,6 +78,8 @@ def _normalize_name(name):
             result += '_STAR_'
         elif '0' <= n <= '9' or 'A' <= n <= 'Z' or 'a' <= n <= 'z':
             result += n
+        elif n == '.':
+            result += n
     return result
 
 
@@ -96,7 +98,7 @@ class CodeGenerator(ScopedVisitor):
         result = ['# {}'.format(datetime.datetime.now()),
                   '\n'.join(self.imports),
                   '\n\n'.join(self.functions)]
-        return '\n\n'.join(result)
+        return '\n'.join(result)
 
     def generate_symbol(self):
         self._symbol_counter_ += 1
@@ -132,6 +134,10 @@ class CodeGenerator(ScopedVisitor):
         keyword_args = ["{}={}".format(key, node.keyword_args[key]) for key in node.keyword_args]
         args += keyword_args
         return "{}({})".format(function, ', '.join(args))
+
+    def visit_call_builtin(self, node:AstCallBuiltin):
+        args = [self.visit(arg) for arg in node.args]
+        return "{}({})".format(node.function_name, ', '.join(args))
 
     def visit_compare(self, node: AstCompare):
         if node.second_right is None:
@@ -215,13 +221,13 @@ class CodeGenerator(ScopedVisitor):
                 return "{} if {} else None".format(if_expr, test)
 
     def visit_import(self, node: AstImport):
+        self.imports.append("import {}".format(node.module_name))
         if node.imported_names is None:
             result = "import {}{}".format(node.module_name, "as {}".format(node.alias) if node.alias is not None else '')
         elif len(node.imported_names) == 1 and node.alias is not None:
             result = "from {} import {} as {}".format(node.module_name, node.imported_names[0], node.alias)
         else:
             result = "from {} import {}".format(node.module_name, ', '.join(node.imported_names))
-        self.imports.append(result)
         return ""
 
     def visit_let(self, node: AstLet):
@@ -324,8 +330,8 @@ def generate_code(ast, *, code_generator=None, name=None, parameters=None, state
     if type(result) is list:
         result = [cg.get_prefix()] + result
         result = '\n\n'.join(result)
-    elif len(cg.functions) > 0:
-        result = cg.get_prefix() + '\n\n' + result
+    else:
+        result = cg.get_prefix() + '\n' + result
 
     if name is not None:
         assert type(name) is str, "name must be a string"

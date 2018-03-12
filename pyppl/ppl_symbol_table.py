@@ -8,25 +8,31 @@
 #
 from .ppl_ast import *
 from . import ppl_types, ppl_type_inference
-
+from .ppl_namespaces import namespace_from_module
 
 _symbol_counter = 1000
 
 class Symbol(object):
 
-    def __init__(self, name:str, read_only:bool=False, missing:bool=False):
+    def __init__(self, name:str, read_only:bool=False, missing:bool=False, predef:Optional[str]=None):
         global _symbol_counter
         self.name = name            # type:str
         self.usage_count = 0        # type:int
         self.modify_count = 0       # type:int
         self.read_only = read_only  # type:bool
         self.value_type = None
-        self.full_name = "{}__sym_{}__".format(name, _symbol_counter)
-        _symbol_counter += 1
+        if predef is not None:
+            self.full_name = predef
+            self.is_predef = True
+        else:
+            self.full_name = "{}__sym_{}__".format(name, _symbol_counter)
+            _symbol_counter += 1
+            self.is_predef = False
         if missing:
             self.modify_count = -1
         assert type(self.name) is str
         assert type(self.read_only) is bool
+        assert predef is None or type(predef) is str
 
     def use(self):
         self.usage_count += 1
@@ -129,6 +135,11 @@ class SymbolTableGenerator(ScopedVisitor):
         symbol.use()
         return symbol
 
+    def import_symbol(self, name:str, full_name:str):
+        symbol = Symbol(name, read_only=True, predef=full_name)
+        self.define(name, symbol)
+        return symbol
+
 
     def visit_node(self, node:AstNode):
         node.visit_children(self)
@@ -168,7 +179,19 @@ class SymbolTableGenerator(ScopedVisitor):
             node.f_locals = set(self.get_full_name(n) for n in self.scope.bindings.keys())
 
     def visit_import(self, node: AstImport):
-        return self.visit_node(node)
+        module, names = namespace_from_module(node.module_name)
+        if node.imported_names is not None:
+            if node.alias is None:
+                for name in node.imported_names:
+                    self.import_symbol(name, "{}.{}".format(module, name))
+            else:
+                self.import_symbol(node.alias, "{}.{}".format(module, node.imported_names[0]))
+
+        else:
+            m = node.module_name if node.alias is None else node.alias
+            self.import_symbol(m, module)
+            for name in names:
+                self.import_symbol("{}.{}".format(m, name), "{}.{}".format(module, name))
 
     def visit_let(self, node: AstLet):
         self.visit(node.source)
@@ -192,6 +215,8 @@ class SymbolTableGenerator(ScopedVisitor):
             symbol = self.use_symbol(node.original_name)
             node.symbol = symbol
             node.name = symbol.full_name
+            if symbol.is_predef:
+                node.original_name = node.name
 
     def visit_while(self, node: AstWhile):
         return self.visit_node(node)

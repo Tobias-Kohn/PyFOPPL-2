@@ -582,6 +582,11 @@ class AstCall(AstNode):
     def function_name(self):
         if isinstance(self.function, AstSymbol):
             return self.function.original_name
+        elif isinstance(self.function, AstAttribute):
+            if isinstance(self.function.base, AstSymbol):
+                return "{}.{}".format(self.function.base.original_name, self.function.attr)
+            else:
+                return None
         else:
             return None
 
@@ -630,6 +635,10 @@ class AstCallBuiltin(AstNode):
     @property
     def function(self):
         return AstSymbol(self.function_name)
+
+    @property
+    def has_keyword_args(self):
+        return False
 
     def equals(self, node):
         if self.function_name == node.function_name and self.arg_count == node.arg_count:
@@ -871,7 +880,7 @@ class AstIf(AstControl):
 
 class AstImport(AstNode):
 
-    def __init__(self, module_name:str, imported_names:Optional[list], alias:Optional[str]=None):
+    def __init__(self, module_name:str, imported_names:Optional[list]=None, alias:Optional[str]=None):
         self.module_name = module_name
         self.imported_names = imported_names
         self.alias = alias
@@ -930,6 +939,21 @@ class AstListFor(AstNode):
             return "[{} for {} in {} if {}]".format(repr(self.expr), self.target, repr(self.source), repr(self.test))
         else:
             return "[{} for {} in {}]".format(repr(self.expr), self.target, repr(self.source))
+
+
+class AstNamespace(AstNode):
+
+    def __init__(self, name: str, bindings: dict):
+        self.name = name
+        self.bindings = bindings
+        assert type(self.name) is str and self.name != ''
+        assert type(self.bindings) is dict
+
+    def __getitem__(self, item):
+        return self.bindings[item]
+
+    def __repr__(self):
+        return "namespace[{}]".format(self.name)
 
 
 class AstObserve(AstNode):
@@ -1528,8 +1552,11 @@ def is_string(node:AstNode):
     else:
         return False
 
-def is_symbol(node:AstNode):
-    return isinstance(node, AstSymbol)
+def is_symbol(node:AstNode, symbol:Optional[str]=None):
+    if isinstance(node, AstSymbol):
+        return symbol is None or node.name == symbol
+    else:
+        return False
 
 def is_unary_neg(node:AstNode):
     if isinstance(node, AstUnary):

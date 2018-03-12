@@ -4,9 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 12. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
+from pyppl.ppl_namespaces import namespace_from_module
 import ast
 
 
@@ -200,7 +201,8 @@ class PythonParser(ast.NodeVisitor):
             elif name == 'observe':
                 _check_arg_arity(name, args, 2)
                 result = AstObserve(args[0], args[1])
-            elif name in ('len', 'map', 'max', 'min', 'range', 'reversed', 'sorted', 'sum', 'zip'):
+            elif name in ('abs', 'divmod', 'filter', 'format', 'len', 'map', 'max', 'min', 'pow', 'print', 'range',
+                          'reversed', 'round', 'sorted', 'sum', 'zip'):
                 if len(keywords) > 0:
                     raise SyntaxError("extra keyword arguments for '{}'".format(name))
                 result = AstCallBuiltin(name, args)
@@ -312,8 +314,8 @@ class PythonParser(ast.NodeVisitor):
             raise NotImplementedError("cannot import with level != 0: '{}'".format(ast.dump(node)))
         module = node.module
         if len(node.names) == 1 and node.names[0].name == '*':
-            if module in ['math', 'cmath']:
-                names = [n for n in dir(__import__(module)) if not n.startswith('_')]
+            _, names = namespace_from_module(module)
+            if len(names) > 0:
                 return _cl(AstImport(module, names), node)
             else:
                 raise NotImplementedError("cannot import '{}'".format(ast.dump(node)))
