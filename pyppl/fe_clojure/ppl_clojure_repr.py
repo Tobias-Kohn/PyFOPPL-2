@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 27. Feb 2018, Tobias Kohn
-# 08. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 
@@ -41,14 +41,9 @@ class ClojureRepr(Visitor):
     def visit_call(self, node:AstCall):
         function = self.visit(node.function)
         args = [self.visit(item) for item in node.args]
-        if len(node.keyword_args) > 0:
-            kw_args = [ ":{} {}".format(key, node.keyword_args[key]) for key in node.keyword_args ]
-            args.extend(kw_args)
+        keywords = [''] * node.pos_arg_count + [':{} '.format(key) for key in node.keywords]
+        args = [a + b for a, b in zip(keywords, args)]
         return "({} {})".format(function, ' '.join(args))
-
-    def visit_call_builtin(self, node:AstCallBuiltin):
-        args = [self.visit(item) for item in node.args]
-        return "({} {})".format(node.function_name, ' '.join(args))
 
     def visit_compare(self, node:AstCompare):
         left = self.visit(node.left)

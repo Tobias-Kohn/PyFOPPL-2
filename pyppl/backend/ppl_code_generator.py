@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 02. Mar 2018, Tobias Kohn
-# 12. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from pyppl.ppl_ast_annotators import get_info
@@ -50,7 +50,7 @@ def _push_return(node, f):
     elif isinstance(node, AstBody) and len(node) > 1:
         return AstBody(node.items[:-1] + [_push_return(node.items[-1], f)])
     elif isinstance(node, AstLet):
-        return AstLet(node.targets, node.sources, _push_return(node.body, f))
+        return AstLet(node.target, node.source, _push_return(node.body, f))
     elif isinstance(node, AstFor):
         return AstFor(node.target, node.source, _push_return(node.body, f))
     elif isinstance(node, AstDef):
@@ -131,13 +131,9 @@ class CodeGenerator(ScopedVisitor):
     def visit_call(self, node: AstCall):
         function = self.visit(node.function)
         args = [self.visit(arg) for arg in node.args]
-        keyword_args = ["{}={}".format(key, node.keyword_args[key]) for key in node.keyword_args]
-        args += keyword_args
+        keywords = [''] * node.pos_arg_count + ['{}='.format(key) for key in node.keywords]
+        args = [a + b for a, b in zip(keywords, args)]
         return "{}({})".format(function, ', '.join(args))
-
-    def visit_call_builtin(self, node:AstCallBuiltin):
-        args = [self.visit(arg) for arg in node.args]
-        return "{}({})".format(node.function_name, ', '.join(args))
 
     def visit_compare(self, node: AstCompare):
         if node.second_right is None:

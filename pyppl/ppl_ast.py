@@ -4,11 +4,12 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 13. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
 from ast import copy_location as _cl
+import inspect as _inspect
 
 class AstNode(object):
     """
@@ -246,6 +247,23 @@ class AstNode(object):
 
     def __eq__(self, other):
         return self.equals(other) if isinstance(other, self.__class__) else False
+
+    def clone(self, **kwargs):
+        init_method = getattr(self, '__init__', None)
+        if init_method is not None:
+            args = { arg: getattr(self, arg, None) for arg in _inspect.getfullargspec(init_method).args if arg != 'self' }
+            for arg in args:
+                if arg in kwargs:
+                    args[arg] = kwargs[arg]
+            result = self.__class__(**args)
+        else:
+            result = self.__class__()
+        fields = set(self.__dict__).difference(set(result.__dict__))
+        for field in fields:
+            setattr(result, field, getattr(self, field))
+        for key in kwargs:
+            setattr(result, key, kwargs[key])
+        return result
 
 
 class Visitor(object):
@@ -532,9 +550,6 @@ class AstBody(AstNode):
 
 class AstBreak(AstNode):
 
-    def __init__(self):
-        pass
-
     def __repr__(self):
         return "break"
 
@@ -547,36 +562,46 @@ class AstBreak(AstNode):
 
 class AstCall(AstNode):
 
-    def __init__(self, function:AstNode, args:list, keyword_args:dict=None):
-        if keyword_args is None:
-            keyword_args = {}
+    def __init__(self, function:AstNode, args:list, keywords:Optional[list]=None, is_builtin:bool=False):
+        if keywords is None:
+            keywords = []
         self.function = function
         self.args = args
-        self.keyword_args = keyword_args # type:dict
+        self.keywords = keywords # type:list
+        self.is_builtin = is_builtin
         assert isinstance(function, AstNode)
         assert all([isinstance(arg, AstNode) for arg in args])
-        assert type(keyword_args) is dict
-        assert all([type(key) is str and isinstance(keyword_args[key], AstNode) for key in keyword_args.keys()])
+        assert type(self.keywords) is list
+        assert all([type(keyword) is str for keyword in self.keywords])
+        assert type(self.is_builtin) is bool
 
     def __repr__(self):
+        keywords = [''] * (len(self.args) - len(self.keywords)) + ['{}='.format(key) for key in self.keywords]
         args = [repr(arg) for arg in self.args]
-        for key in self.keyword_args:
-            args.append('{}={}'.format(key, repr(self.keyword_args[key])))
+        args = [a + b for a, b in zip(keywords, args)]
         return "{}({})".format(repr(self.function), ', '.join(args))
 
     def get_visitor_names(self):
         name = self.function_name
         if name is not None:
-            name = 'visit_call_' + name
+            call_name = 'visit_call_' + name
             for ch in ('+', '-', '.', '/', '*'):
-                name = name.replace(ch, '_')
-            return [name] + super().get_visitor_names()
+                call_name = call_name.replace(ch, '_')
+            result = [call_name] + super().get_visitor_names()
+            if self.is_builtin:
+                builtin_name = 'visit_builtin_' + name
+                result = [builtin_name] + result
+            return result
         else:
             return super().get_visitor_names()
 
     @property
     def arg_count(self):
         return len(self.args)
+
+    @property
+    def pos_arg_count(self):
+        return len(self.args) - len(self.keywords)
 
     @property
     def function_name(self):
@@ -592,58 +617,18 @@ class AstCall(AstNode):
 
     @property
     def has_keyword_args(self):
-        return len(self.keyword_args) > 0
+        return len(self.keywords) > 0
 
     def equals(self, node):
         if self.function == node.function and len(self.args) == len(node.args) and \
-                len(self.keyword_args) == len(node.keyword_args):
+                len(self.keywords) == len(node.keywords):
             for a, b in zip(self.args, node.args):
                 if a != b:
                     return False
-            for key in self.keyword_args:
-                if key not in node or self.keyword_args[key] != node.keyword_args[key]:
+            for a, b in zip(self.keywords, node.keywords):
+                if a != b:
                     return False
             return True
-        else:
-            return False
-
-
-class AstCallBuiltin(AstNode):
-
-    def __init__(self, function:str, args:list, is_pure:bool=True):
-        self.function_name = function
-        self.args = args
-        self.is_pure = is_pure
-        self.keyword_args = {}
-        assert type(self.function_name) is str
-        assert all([isinstance(arg, AstNode) for arg in self.args])
-        assert type(self.is_pure) is bool
-
-    def __repr__(self):
-        args = [repr(arg) for arg in self.args]
-        return "{}({})".format(self.function_name, ', '.join(args))
-
-    def get_visitor_names(self):
-        name = 'visit_call_' + self.function_name
-        for ch in ('+', '-', '.', '/', '*'):
-            name = name.replace(ch, '_')
-        return [name, 'visit_builtin'] + super().get_visitor_names()
-
-    @property
-    def arg_count(self):
-        return len(self.args)
-
-    @property
-    def function(self):
-        return AstSymbol(self.function_name)
-
-    @property
-    def has_keyword_args(self):
-        return False
-
-    def equals(self, node):
-        if self.function_name == node.function_name and self.arg_count == node.arg_count:
-            return all([a == b for a, b in zip(self.args, node.args)])
         else:
             return False
 
@@ -957,54 +942,17 @@ class AstNamespace(AstNode):
         return "namespace[{}]".format(self.name)
 
 
-class AstNumpyValue(AstLeaf):
-
-    def __init__(self, data):
-        self.data = data
-
-    def __repr__(self):
-        return repr(self.data)
-
-
-class AstNumpyVector(AstLeaf):
-
-    def __init__(self, data):
-        self.data = data
-
-    def __getitem__(self, item):
-        return AstNumpyValue(self.data[item])
-
-    def __len__(self):
-        return len(self.data)
-
-    def __iter__(self):
-        return (AstNumpyValue(item) for item in self.data)
-
-    def __repr__(self):
-        return repr(self.data)
-
-    def equals(self, other):
-        return self.data == other.data
-
-    @property
-    def is_empty(self):
-        return len(self.data) == 0
-
-    @property
-    def non_empty(self):
-        return len(self.data) != 0
-
-
 class AstObserve(AstNode):
 
-    def __init__(self, dist:AstNode, observed_value:AstNode):
+    def __init__(self, dist:AstNode, value:AstNode):
         self.dist = dist
-        self.value = observed_value
+        self.value = value
         assert isinstance(self.dist, AstNode)
         assert isinstance(self.value, AstNode)
 
     def __repr__(self):
         return "observe({}, {})".format(repr(self.dist), repr(self.value))
+
 
 
 class AstReturn(AstNode):
@@ -1540,7 +1488,7 @@ def is_empty(node:AstNode):
         return True
     elif isinstance(node, AstBody):
         return node.is_empty
-    elif isinstance(node, AstValueVector) or isinstance(node, AstVector) or isinstance(node, AstNumpyVector):
+    elif isinstance(node, AstValueVector) or isinstance(node, AstVector):
         return node.is_empty
     elif isinstance(node, AstValue):
         return node.value is None
@@ -1553,8 +1501,6 @@ def is_function(node:AstNode):
 def is_integer(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) is int
-    elif isinstance(node, AstNumpyValue):
-        return False
     else:
         return False
 
@@ -1584,8 +1530,6 @@ def is_non_empty_body(node:AstNode):
 def is_number(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) in [complex, float, int]
-    elif isinstance(node, AstNumpyValue):
-        return True
     else:
         return False
 
@@ -1614,4 +1558,4 @@ def is_unary_not(node:AstNode):
         return False
 
 def is_vector(node:AstNode):
-    return isinstance(node, AstValueVector) or isinstance(node, AstVector) or isinstance(node, AstNumpyVector)
+    return isinstance(node, AstValueVector) or isinstance(node, AstVector)

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 12. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from pyppl.ppl_namespaces import namespace_from_module
@@ -127,7 +127,8 @@ class PythonParser(ast.NodeVisitor):
                     isinstance(target.slice, ast.Index):
                 base = target.value.id
                 index = target.slice.value
-                return _cl(AstCallBuiltin('list.put', [self.visit(base), self.visit(index), source]), node)
+                return _cl(AstCall(AstSymbol('list.put'), [self.visit(base), self.visit(index), source],
+                                   is_builtin=True), node)
 
         elif len(node.targets) > 1 and all(isinstance(target, ast.Name) for target in node.targets):
             result = []
@@ -180,32 +181,40 @@ class PythonParser(ast.NodeVisitor):
             attr_base = self.visit(node.func.value)
             attr_name = node.func.attr
             args = [self.visit(arg) for arg in node.args]
-            keywords = { kw.arg: self.visit(kw.value) for kw in node.keywords }
+            keywords = []
+            for kw in node.keywords:
+                keywords.append(kw.arg)
+                args.append(self.visit(kw.value))
             if attr_name in ['append', 'extend', 'insert', 'remove', 'index']:
                 if len(keywords) > 0:
                     raise SyntaxError("extra keyword arguments for '{}'".format(attr_name))
-                return _cl(AstCallBuiltin('list.' + attr_name, [attr_base] + args), node)
+                return _cl(AstCall(AstSymbol('list.' + attr_name), [attr_base] + args, is_builtin=True), node)
             elif attr_name in ['get', 'keys', 'items', 'values', 'update']:
                 if len(keywords) > 0:
                     raise SyntaxError("extra keyword arguments for '{}'".format(attr_name))
-                return _cl(AstCallBuiltin('dict.' + attr_name, [attr_base] + args), node)
+                return _cl(AstCall(AstSymbol('dict.' + attr_name), [attr_base] + args, is_builtin=True), node)
             return _cl(AstCall(AstAttribute(attr_base, attr_name), args, keywords), node)
 
         elif isinstance(node.func, ast.Name):
             name = node.func.id
             args = [self.visit(arg) for arg in node.args]
-            keywords = { kw.arg: self.visit(kw.value) for kw in node.keywords }
+            keywords = []
+            for kw in node.keywords:
+                keywords.append(kw.arg)
+                args.append(self.visit(kw.value))
             if name == 'sample':
                 _check_arg_arity(name, args, 1)
+                if len(keywords) > 0:
+                    raise SyntaxError("extra keyword arguments for '{}'".format(name))
                 result = AstSample(args[0])
             elif name == 'observe':
                 _check_arg_arity(name, args, 2)
+                if len(keywords) > 0:
+                    raise SyntaxError("extra keyword arguments for '{}'".format(name))
                 result = AstObserve(args[0], args[1])
             elif name in ('abs', 'divmod', 'filter', 'format', 'len', 'map', 'max', 'min', 'pow', 'print', 'range',
                           'reversed', 'round', 'sorted', 'sum', 'zip'):
-                if len(keywords) > 0:
-                    raise SyntaxError("extra keyword arguments for '{}'".format(name))
-                result = AstCallBuiltin(name, args)
+                result = AstCall(AstSymbol(name), args, keywords, is_builtin=True)
             else:
                 result = AstCall(AstSymbol(name), args, keywords)
             return _cl(result, node)
@@ -213,7 +222,10 @@ class PythonParser(ast.NodeVisitor):
         elif isinstance(node.func, ast.Lambda):
             func = self.visit_Lambda(node.func)
             args = [self.visit(arg) for arg in node.args]
-            keywords = { kw.arg: self.visit(kw.value) for kw in node.keywords }
+            keywords = []
+            for kw in node.keywords:
+                keywords.append(kw.arg)
+                args.append(self.visit(kw.value))
             return _cl(AstCall(func, args, keywords), node)
 
         else:

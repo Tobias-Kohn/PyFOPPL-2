@@ -53,13 +53,6 @@ class VarSubstitutor(Visitor):
         else:
             return _cl(makeBody(items), node)
 
-    def visit_builtin(self, node: AstCallBuiltin):
-        args = self.parse_items(node.args)
-        if args is node.args:
-            return node
-        else:
-            return _cl(AstCallBuiltin(function=node.function_name, args=args), node)
-
     def visit_call(self, node: AstCall):
         args = self.parse_items(node.args)
         if args is node.args:

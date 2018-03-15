@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
 from pyppl.fe_clojure import ppl_clojure_forms as clj
 from pyppl.ppl_ast import *
@@ -241,7 +241,7 @@ class ClojureParser(clj.Visitor):
         sequence = self.visit(sequence)
         index = self.visit(index)
         value = self.visit(value)
-        return AstCallBuiltin('list.put', [sequence, index, value])
+        return AstCall(AstSymbol('list.put'), [sequence, index, value], is_builtin=True)
 
     def visit_repeat(self, count, value):
         value = value.visit(self)

@@ -239,8 +239,7 @@ class Simplifier(BranchScopeVisitor):
     def visit_call(self, node:AstCall):
         function = self.visit(node.function)
         prefix, args = self.parse_args(node.args)
-        keywords = { key:self.visit(node.keyword_args[key]) for key in node.keyword_args }
-        if isinstance(function, AstFunction) and len(keywords) == 0 and \
+        if isinstance(function, AstFunction) and not node.has_keyword_args and \
                 all([not get_info(arg).has_changed_vars for arg in args]):
 
             self.define_all(function.parameters, args, vararg=function.vararg)
@@ -263,29 +262,24 @@ class Simplifier(BranchScopeVisitor):
                     return makeBody(items, result)
 
         elif isinstance(function, AstDict):
-            if len(args) != 1 or len(keywords) != 0:
-                raise TypeError("dict access requires exactly one argument ({} given)".format(len(args) + len(keywords)))
+            if len(args) != 1 or node.has_keyword_args:
+                raise TypeError("dict access requires exactly one argument ({} given)".format(node.arg_count))
             return _cl(makeSubscript(function, args[0]), node)
 
-        result = _cl(AstCall(function, args, keywords), node)
+        result = _cl(AstCall(function, args, node.keywords), node)
         return makeBody(prefix, result)
 
-    def visit_call_abs(self, node: AstCallBuiltin):
+    def visit_call_abs(self, node: AstCall):
         if node.arg_count == 1 and not node.has_keyword_args:
             arg = self.visit_expr(node.args[0])
             if isinstance(arg, AstValue):
                 return _cl(AstValue(abs(arg.value)), node)
 
-        return self.visit_call_builtin(node)
-
-    def visit_call_builtin(self, node: AstCallBuiltin):
-        prefix, args = self.parse_args(node.args)
-        result = _cl(AstCallBuiltin(node.function_name, args), node)
-        return makeBody(prefix, result)
+        return self.visit_call(node)
 
     def visit_call_clojure_core_concat(self, node:AstCall):
         import itertools
-        if len(node.keyword_args) == 0:
+        if not node.has_keyword_args:
             args = [self.visit(arg) for arg in node.args]
             if all([is_string(item) for item in args]):
                 return _cl(AstValue(''.join([item.value for item in args])), node)
@@ -300,7 +294,7 @@ class Simplifier(BranchScopeVisitor):
         return self.visit_call(node)
 
     def visit_call_clojure_core_conj(self, node:AstCall):
-        if len(node.keyword_args) == 0:
+        if not node.has_keyword_args:
             args = [self.visit(arg) for arg in node.args]
             if len(args) > 1 and is_vector(args[0]):
                 sequence = args[0]
@@ -310,7 +304,7 @@ class Simplifier(BranchScopeVisitor):
         return self.visit_call(node)
 
     def visit_call_clojure_core_cons(self, node:AstCall):
-        if len(node.keyword_args) == 0:
+        if not node.has_keyword_args:
             args = [self.visit(arg) for arg in node.args]
             if len(args) > 1 and is_vector(args[-1]):
                 sequence = args[-1]

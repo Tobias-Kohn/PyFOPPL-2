@@ -21,7 +21,7 @@ class RawSimplifier(Visitor):
                 return [], node[0]
             else:
                 return node.items[:-1], node.items[-1]
-        elif isinstance(node, AstCall) or (isinstance(node, AstCallBuiltin) and not node.is_pure):
+        elif isinstance(node, AstCall):
             tmp = generate_temp_var()
             return [AstDef(tmp, node, global_context=False)], AstSymbol(tmp)
         else:
@@ -68,7 +68,7 @@ class RawSimplifier(Visitor):
                 p, a = self._visit_expr(arg)
                 prefix += p
                 args.append(a)
-            return _cl(makeBody(prefix, AstCall(function, args, node.keyword_args)), node)
+            return _cl(makeBody(prefix, AstCall(function, args, node.keywords)), node)
         else:
             return node
 
@@ -178,8 +178,7 @@ class RawSimplifier(Visitor):
         v_prefix, value = self._visit_expr(node.value)
         # keep it from being over zealous
         if len(d_prefix) == 1 and isinstance(d_prefix[0], AstDef) and isinstance(dist, AstSymbol) and \
-                        d_prefix[0].name == dist.name and \
-                (isinstance(d_prefix[0].value, AstCall) or isinstance(d_prefix[0], AstCallBuiltin)):
+                        d_prefix[0].name == dist.name and isinstance(d_prefix[0].value, AstCall):
             d_prefix, dist = [], d_prefix[0].value
         if dist is node.dist and value is node.value:
             return node
@@ -198,8 +197,7 @@ class RawSimplifier(Visitor):
         prefix, dist = self._visit_expr(node.dist)
         # keep it from being over zealous
         if len(prefix) == 1 and isinstance(prefix[0], AstDef) and isinstance(dist, AstSymbol) and \
-                        prefix[0].name == dist.name and \
-                (isinstance(prefix[0].value, AstCall) or isinstance(prefix[0], AstCallBuiltin)):
+                        prefix[0].name == dist.name and isinstance(prefix[0].value, AstCall):
             prefix, dist = [], prefix[0].value
         if dist is node.dist:
             return node

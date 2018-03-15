@@ -184,8 +184,7 @@ class InfoAnnotator(Visitor):
         is_expr = node.function_name in self.__expr_functions__
         base = [self.visit(node.function)]
         args = [self.visit(arg) for arg in node.args]
-        kw_args = [self.visit(node.keyword_args[key]) for key in node.keyword_args]
-        return NodeInfo(base=base + args + kw_args, is_expr=is_expr)
+        return NodeInfo(base=base + args, is_expr=is_expr)
 
     def visit_compare(self, node: AstCompare):
         return NodeInfo(base=[self.visit(node.left), self.visit(node.right), self.visit(node.second_right)], is_expr=True)
@@ -218,10 +217,8 @@ class InfoAnnotator(Visitor):
         return NodeInfo()
 
     def visit_let(self, node: AstLet):
-        result = self.visit(node.body)
-        for t, s in zip(reversed(node.targets), reversed(node.sources)):
-            result = result.bind_var(t)
-            result = result.union(self.visit(s))
+        result = self.visit(node.body).bind_var(node.target)
+        result = result.union(self.visit(node.source))
         return result
 
     def visit_list_for(self, node: AstListFor):

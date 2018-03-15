@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 12. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from .ppl_graph_factory import GraphFactory
@@ -93,15 +93,9 @@ class GraphGenerator(ScopedVisitor):
         items, parents = self._visit_items(node.items)
         return makeBody(items), parents
 
-    def visit_builtin(self, node: AstCallBuiltin):
-        args, parents = self._visit_items(node.args)
-        return AstCallBuiltin(node.function_name, args), parents
-
     def visit_call(self, node: AstCall):
         args, parents = self._visit_items(node.args)
-        kw_args, kw_parents = self._visit_dict(node.keyword_args)
-        parents = set.union(parents, kw_parents)
-        return AstCall(node.function, args, kw_args), parents
+        return AstCall(node.function, args, node.keywords), parents
 
     def visit_compare(self, node: AstCompare):
         left, l_parents = self.visit(node.left)
