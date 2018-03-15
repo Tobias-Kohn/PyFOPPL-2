@@ -4,8 +4,9 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 12. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
+from pyppl.transforms import ppl_var_substitutor
 from pyppl.ppl_ast import *
 from pyppl.ppl_ast_annotators import *
 from ast import copy_location as _cl
@@ -802,6 +803,27 @@ def simplify(ast, symbol_list):
                     del free_vars[i]
                     continue
             i += 1
+
+        i = 0
+        bindings = {}
+        while i < len(result):
+            if isinstance(result[i], AstDef):
+                name = result[i].name
+                value = result[i].value
+                if not isinstance(value, AstFunction):
+                    j = i+1
+                    usage_count = 0
+                    while j < len(result):
+                        usage_count += count_variable_usage(name, result[j])
+                        j += 1
+                    if usage_count <= 1:
+                        bindings[name] = value
+                        del result[i]
+                        continue
+            i += 1
+        vs = ppl_var_substitutor.VarSubstitutor(bindings)
+        for i in range(len(result)):
+            result[i] = vs.visit(result[i])
 
     if type(result) in (list, tuple) and len(result) == 1:
         return result[0]

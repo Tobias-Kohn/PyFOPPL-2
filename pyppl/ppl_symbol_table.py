@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Mar 2018, Tobias Kohn
-# 12. Mar 2018, Tobias Kohn
+# 15. Mar 2018, Tobias Kohn
 #
 from .ppl_ast import *
 from . import ppl_types, ppl_type_inference
@@ -23,6 +23,9 @@ class Symbol(object):
         self.value_type = None
         if predef is not None:
             self.full_name = predef
+            self.is_predef = True
+        elif '.' in self.name:
+            self.full_name = self.name
             self.is_predef = True
         else:
             self.full_name = "{}__sym_{}__".format(name, _symbol_counter)

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 12. Mar 2018, Tobias Kohn
+# 13. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -614,6 +614,7 @@ class AstCallBuiltin(AstNode):
         self.function_name = function
         self.args = args
         self.is_pure = is_pure
+        self.keyword_args = {}
         assert type(self.function_name) is str
         assert all([isinstance(arg, AstNode) for arg in self.args])
         assert type(self.is_pure) is bool
@@ -954,6 +955,44 @@ class AstNamespace(AstNode):
 
     def __repr__(self):
         return "namespace[{}]".format(self.name)
+
+
+class AstNumpyValue(AstLeaf):
+
+    def __init__(self, data):
+        self.data = data
+
+    def __repr__(self):
+        return repr(self.data)
+
+
+class AstNumpyVector(AstLeaf):
+
+    def __init__(self, data):
+        self.data = data
+
+    def __getitem__(self, item):
+        return AstNumpyValue(self.data[item])
+
+    def __len__(self):
+        return len(self.data)
+
+    def __iter__(self):
+        return (AstNumpyValue(item) for item in self.data)
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def equals(self, other):
+        return self.data == other.data
+
+    @property
+    def is_empty(self):
+        return len(self.data) == 0
+
+    @property
+    def non_empty(self):
+        return len(self.data) != 0
 
 
 class AstObserve(AstNode):
@@ -1501,7 +1540,7 @@ def is_empty(node:AstNode):
         return True
     elif isinstance(node, AstBody):
         return node.is_empty
-    elif isinstance(node, AstValueVector) or isinstance(node, AstVector):
+    elif isinstance(node, AstValueVector) or isinstance(node, AstVector) or isinstance(node, AstNumpyVector):
         return node.is_empty
     elif isinstance(node, AstValue):
         return node.value is None
@@ -1514,6 +1553,8 @@ def is_function(node:AstNode):
 def is_integer(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) is int
+    elif isinstance(node, AstNumpyValue):
+        return False
     else:
         return False
 
@@ -1543,6 +1584,8 @@ def is_non_empty_body(node:AstNode):
 def is_number(node:AstNode):
     if isinstance(node, AstValue):
         return type(node.value) in [complex, float, int]
+    elif isinstance(node, AstNumpyValue):
+        return True
     else:
         return False
 
@@ -1571,4 +1614,4 @@ def is_unary_not(node:AstNode):
         return False
 
 def is_vector(node:AstNode):
-    return isinstance(node, AstValueVector) or isinstance(node, AstVector)
+    return isinstance(node, AstValueVector) or isinstance(node, AstVector) or isinstance(node, AstNumpyVector)
