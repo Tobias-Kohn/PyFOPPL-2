@@ -6,6 +6,8 @@
 # 07. Feb 2018, Tobias Kohn
 # 16. Mar 2018, Tobias Kohn
 #
+from typing import Optional
+
 class Type(object):
 
     def __init__(self, *, name:str, base=None):
@@ -399,6 +401,34 @@ def from_python(value):
 
     else:
         return AnyType
+
+def makeArray(base):
+    if isinstance(base, SequenceType):
+        item = makeArray(base.item) if isinstance(base.item, SequenceType) else base.item
+        return Array[item, base.size]
+    else:
+        return Array[base, 1]
+
+def makeTensor(base, base_type:Optional[str]=None):
+    if base_type is not None:
+        if base in ('FloatTensor', 'DoubleTensor', 'HalfTensor'):
+            b_type = Tensor[Float]
+        elif base in ('IntTensor', 'ShortTensor', 'ByteTensor', 'LongTensor'):
+            b_type = Tensor[Integer]
+        else:
+            b_type = Tensor
+    else:
+        b_type = None
+
+    if isinstance(base, SequenceType):
+        if b_type is None:
+            b_type = base.item
+        item = makeTensor(base.item, base_type) if isinstance(base.item, SequenceType) else b_type
+        return Tensor[item, base.size]
+    elif base_type is not None:
+        return Tensor[b_type, 1]
+    else:
+        return Tensor[base, 1]
 
 def union(*types):
     types = [t for t in types if t is not None]

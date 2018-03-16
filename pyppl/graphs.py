@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 12. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 
@@ -183,9 +183,10 @@ class Vertex(GraphNode):
       The original code for the `evaluate`-method as a string. This is mostly used for debugging.
     """
 
-    def __init__(self, name: str, *, ancestors: Optional[set]=None, dist_code: str):
+    def __init__(self, name: str, *, ancestors: Optional[set]=None, dist_code: str, sample_size: int = 1):
         super().__init__(name, ancestors)
         self.dist_code = dist_code
+        self.sample_size = sample_size
 
     def __repr__(self):
         return self.create_repr("Vertex", DistCode=self.dist_code)

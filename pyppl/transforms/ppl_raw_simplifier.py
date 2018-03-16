@@ -8,6 +8,7 @@
 #
 from ast import copy_location as _cl
 from pyppl.ppl_ast import *
+from pyppl.ppl_ast_annotators import get_info
 
 class RawSimplifier(Visitor):
 
@@ -111,10 +112,11 @@ class RawSimplifier(Visitor):
     def visit_for(self, node: AstFor):
         prefix, source = self._visit_expr(node.source)
         body = self.visit(node.body)
-        if source is node.source and body is node.body:
+        target = node.target if node.target in get_info(body).free_vars else '_'
+        if target is node.target and source is node.source and body is node.body:
             return node
         else:
-            return _cl(makeBody(prefix, AstFor(node.target, source, body, original_target=node.original_target)), node)
+            return _cl(makeBody(prefix, AstFor(target, source, body, original_target=node.original_target)), node)
 
     def visit_function(self, node: AstFunction):
         body = self.visit(node.body)
@@ -167,11 +169,12 @@ class RawSimplifier(Visitor):
     def visit_list_for(self, node: AstListFor):
         prefix, source = self._visit_expr(node.source)
         expr = self.visit(node.expr)
-        if source is node.source and expr is node.expr:
+        target = node.target if node.target in get_info(expr).free_vars else '_'
+        if target is node.target and source is node.source and expr is node.expr:
             return node
         else:
             return _cl(makeBody(prefix,
-                                AstListFor(node.target, source, expr, original_target=node.original_target)), node)
+                                AstListFor(target, source, expr, original_target=node.original_target)), node)
 
     def visit_observe(self, node: AstObserve):
         d_prefix, dist = self._visit_expr(node.dist)
@@ -199,10 +202,15 @@ class RawSimplifier(Visitor):
         if len(prefix) == 1 and isinstance(prefix[0], AstDef) and isinstance(dist, AstSymbol) and \
                         prefix[0].name == dist.name and isinstance(prefix[0].value, AstCall):
             prefix, dist = [], prefix[0].value
+        if node.size is not None:
+            s_prefix, size = self._visit_expr(node.size)
+            prefix += s_prefix
+        else:
+            size = None
         if dist is node.dist:
             return node
         else:
-            return _cl(makeBody(prefix, AstSample(dist)), node)
+            return _cl(makeBody(prefix, AstSample(dist, size=size)), node)
 
     def visit_slice(self, node: AstSlice):
         prefix, base = self._visit_expr(node.base)

@@ -205,10 +205,15 @@ class PythonParser(ast.NodeVisitor):
                 keywords.append(kw.arg)
                 args.append(self.visit(kw.value))
             if name == 'sample':
-                _check_arg_arity(name, args, 1)
-                if len(keywords) > 0:
+                if len(args) == 2 and (len(keywords) == 0 or
+                                                (len(keywords) == 1 and keywords[0] in ('sample_size', 'size'))):
+                    size = args[1]
+                elif len(keywords) > 0:
                     raise SyntaxError("extra keyword arguments for '{}'".format(name))
-                result = AstSample(args[0])
+                else:
+                    _check_arg_arity(name, args, 1)
+                    size = None
+                result = AstSample(args[0], size=size)
             elif name == 'observe':
                 _check_arg_arity(name, args, 2)
                 if len(keywords) > 0:

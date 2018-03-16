@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from pyppl.fe_clojure import ppl_clojure_forms as clj
 from pyppl.ppl_ast import *
@@ -282,8 +282,14 @@ class ClojureParser(clj.Visitor):
                 return AstSlice(sequence.base, AstValue(start + 1), sequence.stop)
         return AstSlice(sequence, AstValue(1), None)
 
-    def visit_sample(self, dist):
-        return AstSample(dist.visit(self))
+    def visit_sample(self, dist, *size):
+        if len(size) == 1:
+            size = self.visit(size[0])
+        else:
+            if len(size) > 0:
+                raise TypeError("sample() expected 1 or 2 arguments ({} given)".format(len(size)+1))
+            size = None
+        return AstSample(self.visit(dist), size=size)
 
     def visit_second(self, sequence):
         sequence = sequence.visit(self)

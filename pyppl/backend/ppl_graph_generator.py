@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from .ppl_graph_factory import GraphFactory
@@ -167,8 +167,18 @@ class GraphGenerator(ScopedVisitor):
         return AstSymbol(name, node=node), set()
 
     def visit_sample(self, node: AstSample):
-        dist, parents = self.visit(node.dist)
-        node = self.factory.create_sample_node(dist, parents)
+        dist, d_parents = self.visit(node.dist)
+        if node.size is not None:
+            size, s_parents = self.visit(node.size)
+            parents = set.union(d_parents, s_parents)
+            if isinstance(size, AstValue):
+                size = size.value
+            else:
+                raise RuntimeError("sample size must be a constant integer value instead of '{}'".format(size))
+        else:
+            size = 1
+            parents = d_parents
+        node = self.factory.create_sample_node(dist, size, parents)
         name = getattr(node, 'name', 'x???')
         self.nodes.append(node)
         return AstSymbol(name, node=node), { node }

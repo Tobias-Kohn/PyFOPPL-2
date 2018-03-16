@@ -70,10 +70,10 @@ class GraphFactory(object):
         self.nodes.append(result)
         return result
 
-    def create_sample_node(self, dist: AstNode, parents: set):
+    def create_sample_node(self, dist: AstNode, size: int, parents: set):
         name = self.generate_symbol('x')
         code = self._generate_code_for_node(dist)
-        result = Vertex(name, ancestors=parents, dist_code=code)
+        result = Vertex(name, ancestors=parents, dist_code=code, sample_size=size)
         self.nodes.append(result)
         return result
 
@@ -113,7 +113,10 @@ class GraphFactory(object):
                     sampling_code.append(code)
                     distribution = code
                 log_pdf_code.append("log_pdf += _dst_.log_pdf({})".format(name))
-                sampling_code.append("{} = dst_.sample()".format(name))
+                if node.sample_size > 1:
+                    sampling_code.append("{} = dst_.sample(sample_size={})".format(name, node.sample_size))
+                else:
+                    sampling_code.append("{} = dst_.sample()".format(name))
 
             else:
                 code = "{} = {}".format(name, node.get_code())

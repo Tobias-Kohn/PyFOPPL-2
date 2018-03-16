@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 02. Mar 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from pyppl.ppl_ast_annotators import get_info
@@ -261,7 +261,11 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_sample(self, node: AstSample):
         dist = self.visit(node.dist)
-        return "sample({})".format(dist)
+        size = self.visit(node.size)
+        if size is not None:
+            return "sample({}, sample_size={})".format(dist, size)
+        else:
+            return "sample({})".format(dist)
 
     def visit_slice(self, node: AstSlice):
         base = self.visit(node.base)
@@ -280,7 +284,7 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_symbol(self, node: AstSymbol):
         if self.short_names:
-            if self.state_object is not None and not node.predef:
+            if self.state_object is not None and not node.predef and not '.' in node.original_name:
                 return "{}['{}']".format(self.state_object, node.original_name)
             else:
                 return node.original_name
@@ -289,7 +293,7 @@ class CodeGenerator(ScopedVisitor):
             name = _normalize_name(sym.name)
         else:
             name = _normalize_name(node.name)
-        if self.state_object is not None and not node.predef:
+        if self.state_object is not None and not node.predef and not '.' in name:
             name = "{}['{}']".format(self.state_object, name)
         return name
 

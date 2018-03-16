@@ -76,10 +76,62 @@ class TypeInferencer(Visitor):
     def visit_call_torch_function(self, node: AstCall):
         name = node.function_name
         args = [self.visit(arg) for arg in node.args]
-        if name == 'torch.tensor' and node.arg_count == 1:
-            if isinstance(args[0], SequenceType):
-                result = Tensor[args[0].item, args[0].size]
-                return result
+        f_name = name[6:] if name.startswith('torch.') else name
+        if name.startswith('torch.cuda.'):
+            f_name = f_name[5:]
+        if node.arg_count == 1:
+            if f_name in ('from_numpy',):
+                return makeTensor(args[0])
+            elif f_name in ('ones', 'zeros'):
+                return Tensor[AnyType, self.get_value_of(args[0])]
+            elif f_name in ('ones_like', 'zeros_like', 'empty_like'):
+                return args[0]
+            elif f_name in ('arange',):
+                return Tensor[Integer, self.get_value_of(args[0])]
+            elif f_name in ('tensor', 'Tensor'):
+                return makeTensor(args[0])
+            elif f_name in ('FloatTensor', 'IntTensor', 'DoubleTensor', 'HalfTensor',
+                            'ByteTensor', 'ShortTensor', 'LongTensor'):
+                return makeTensor(args[0], f_name)
+            elif f_name in ('abs', 'acos', 'asin', 'atan', 'ceil', 'cos', 'cosh', 'erf', 'exp', 'expm1', 'floor',
+                            'frac', 'log', 'log1p', 'neg', 'reciprocal', 'round', 'rsqrt', 'sigmoid', 'sign',
+                            'sin', 'sinh', 'sqrt', 'tan', 'tanh', 'trunc'):
+                return args[0]
+            elif f_name in ('diag',):
+                if isinstance(args[0], SequenceType):
+                    return Tensor[makeTensor(args[0]), args[0].size]
+        if node.arg_count > 0:
+            if f_name in ('eye',):
+                d1 = self.get_value_of(args[0])
+                d2 = self.get_value_of(args[1]) if node.arg_count == 2 else d1
+                return Tensor[Tensor[Float, d2], d1]
+            elif f_name in ('arange', 'range'):
+                pos = node.get_position_of_arg('step', 2)
+                start = self.get_value_of(args[0])
+                stop = self.get_value_of(args[1])
+                if start is not None and stop is not None:
+                    count = stop - start
+                    if node.arg_count > pos:
+                        steps = self.get_value_of(args[pos])
+                        if steps is not None and steps > 0:
+                            return Tensor[Integer, count / steps]
+                        else:
+                            return Tensor[Integer]
+                    else:
+                        return Tensor[Integer, count]
+                else:
+                    return Tensor
+            elif f_name in ('linspace', 'logspace'):
+                pos = node.get_position_of_arg('steps', 2)
+                if node.arg_count > pos:
+                    return Tensor[self.get_value_of(args[pos])]
+                else:
+                    return Tensor[100]
+            elif f_name in ('eq', 'ge', 'gt', 'le', 'lt', 'ne',
+                            'add', 'atan2', 'clamp', 'div', 'fmod', 'lerp', 'mul', 'pow', 'remainder'):
+                return args[0]
+            elif f_name in ('equal', 'isnan'):
+                return Boolean
         return Tensor
 
     def visit_compare(self, _):

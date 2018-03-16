@@ -598,6 +598,12 @@ class AstCall(AstNode):
         else:
             return super().get_visitor_names()
 
+    def get_position_of_arg(self, keyword:str, default:int=-1):
+        if keyword in self.keywords:
+            return self.pos_arg_count + self.keywords.index(keyword)
+        else:
+            return default
+
     @property
     def arg_count(self):
         return len(self.args)
@@ -983,12 +989,17 @@ class AstReturn(AstNode):
 
 class AstSample(AstNode):
 
-    def __init__(self, dist: AstNode):
+    def __init__(self, dist: AstNode, size: Optional[AstNode]=None):
         self.dist = dist
+        self.size = size
         assert isinstance(dist, AstNode)
+        assert size is None or isinstance(size, AstNode)
 
     def __repr__(self):
-        return "sample({})".format(repr(self.dist))
+        if self.size is None:
+            return "sample({})".format(repr(self.dist))
+        else:
+            return "sample({}, size={})".format(repr(self.dist), repr(self.size))
 
 
 class AstSlice(AstNode):

@@ -608,7 +608,10 @@ class Simplifier(BranchScopeVisitor):
 
         if node.test is None:
             if node.target == '_' and src_len is not None:
-                return self.visit(_cl(makeVector([node.expr for _ in range(src_len)]), node))
+                if isinstance(node.expr, AstSample) and node.expr.size is None:
+                    return self.visit(node.expr.clone(size=AstValue(src_len)))
+                else:
+                    return self.visit(_cl(makeVector([node.expr for _ in range(src_len)]), node))
 
             if is_vector(source):
                 result = makeVector([AstLet(node.target, item, node.expr,
@@ -653,8 +656,9 @@ class Simplifier(BranchScopeVisitor):
 
     def visit_sample(self, node:AstSample):
         dist = self.visit(node.dist)
-        if dist is not node.dist:
-            return _cl(AstSample(dist), node)
+        size = self.visit(node.size)
+        if dist is not node.dist or size is not node.size:
+            return _cl(AstSample(dist, size=size), node)
         else:
             return node
 
@@ -749,7 +753,11 @@ class Simplifier(BranchScopeVisitor):
         return node
 
     def visit_vector(self, node:AstVector):
-        return makeVector([self.visit(item) for item in node.items])
+        items = [self.visit(item) for item in node.items]
+        if len(items) > 0 and all([isinstance(item, AstSample) and item.size is None for item in items]) and \
+                all([item.dist == items[0].dist for item in items]):
+            return _cl(AstSample(items[0].dist, size=AstValue(len(items))), node)
+        return makeVector(items)
 
     def visit_while(self, node:AstWhile):
         return node
