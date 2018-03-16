@@ -4,16 +4,17 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
-from pyppl.transforms import ppl_var_substitutor
-from pyppl.ppl_ast import *
-from pyppl.ppl_ast_annotators import *
-from ast import copy_location as _cl
-from pyppl.ppl_branch_scopes import BranchScopeVisitor
-from pyppl import ppl_types
-from pyppl import ppl_namespaces
 import math
+from ast import copy_location as _cl
+
+from pyppl import ppl_namespaces
+from pyppl.ppl_ast_annotators import *
+from pyppl.ppl_branch_scopes import BranchScopeVisitor
+from pyppl.transforms import ppl_var_substitutor
+from pyppl.types import ppl_types, ppl_type_inference
+
 
 # Note: Why do we need to protect all mutable variables?
 #   During the optimisation, we regularly visit a part of the AST multiple times, and we might even visit a part of
@@ -48,13 +49,11 @@ class Simplifier(BranchScopeVisitor):
 
     def __init__(self, symbols:list):
         super().__init__(symbols)
+        self.type_inferencer = ppl_type_inference.TypeInferencer(self)
 
     def get_type(self, node: AstNode):
-        if isinstance(node, AstSymbol):
-            symbol = self.resolve(node.name)
-            if symbol is not None:
-                return symbol.get_type()
-        return None
+        result = self.type_inferencer.visit(node)
+        return result
 
     def parse_args(self, args:list):
         can_factor_out = True
@@ -311,6 +310,17 @@ class Simplifier(BranchScopeVisitor):
                 for arg in reversed(args[:-1]):
                     sequence = sequence.cons(arg)
                 return sequence
+        return self.visit_call(node)
+
+    def visit_call_len(self, node: AstCall):
+        if node.arg_count == 1 and not node.has_keyword_args:
+            arg = self.visit_expr(node.args[0])
+            if is_vector(arg):
+                return AstValue(len(arg))
+            arg_type = self.get_type(arg)
+            if isinstance(arg_type, ppl_types.SequenceType):
+                if arg_type.size is not None:
+                    return AstValue(arg_type.size)
         return self.visit_call(node)
 
     def visit_call_math_sqrt(self, node: AstCall):

@@ -58,7 +58,7 @@ class VarSubstitutor(Visitor):
         if args is node.args:
             return node
         else:
-            return _cl(AstCall(function=node.function, args=args, keyword_args=node.keyword_args), node)
+            return node.clone(args=args)
 
     def visit_compare(self, node: AstCompare):
         left = self.visit(node.left)

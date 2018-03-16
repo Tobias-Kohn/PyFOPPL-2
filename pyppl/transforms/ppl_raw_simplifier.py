@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 09. Mar 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from ast import copy_location as _cl
 from pyppl.ppl_ast import *
@@ -21,7 +21,7 @@ class RawSimplifier(Visitor):
                 return [], node[0]
             else:
                 return node.items[:-1], node.items[-1]
-        elif isinstance(node, AstCall):
+        elif isinstance(node, AstCall) and not node.is_builtin:
             tmp = generate_temp_var()
             return [AstDef(tmp, node, global_context=False)], AstSymbol(tmp)
         else:
@@ -68,7 +68,7 @@ class RawSimplifier(Visitor):
                 p, a = self._visit_expr(arg)
                 prefix += p
                 args.append(a)
-            return _cl(makeBody(prefix, AstCall(function, args, node.keywords)), node)
+            return _cl(makeBody(prefix, AstCall(function, args, node.keywords, is_builtin=node.is_builtin)), node)
         else:
             return node
 

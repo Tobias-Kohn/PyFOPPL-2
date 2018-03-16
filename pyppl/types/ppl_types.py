@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 class Type(object):
 
@@ -364,6 +364,9 @@ List    = SequenceType(name='List',   base=AnyType)
 Tuple   = SequenceType(name='Tuple',  base=AnyType)
 String  = SequenceType(name='String', base=AnyType, recursive=True)
 Dict    = SequenceType(name='Dict',   base=AnyType)
+
+Array   = SequenceType(name='Array',  base=AnyType)
+Tensor  = SequenceType(name='Tensor', base=AnyType)
 
 Function = FunctionType(name='Function', base=AnyType)
 

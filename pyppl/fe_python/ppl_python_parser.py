@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from pyppl.ppl_namespaces import namespace_from_module
@@ -188,11 +188,13 @@ class PythonParser(ast.NodeVisitor):
             if attr_name in ['append', 'extend', 'insert', 'remove', 'index']:
                 if len(keywords) > 0:
                     raise SyntaxError("extra keyword arguments for '{}'".format(attr_name))
-                return _cl(AstCall(AstSymbol('list.' + attr_name), [attr_base] + args, is_builtin=True), node)
+                return _cl(AstCall(AstSymbol('list.' + attr_name, predef=True), [attr_base] + args,
+                                   is_builtin=True), node)
             elif attr_name in ['get', 'keys', 'items', 'values', 'update']:
                 if len(keywords) > 0:
                     raise SyntaxError("extra keyword arguments for '{}'".format(attr_name))
-                return _cl(AstCall(AstSymbol('dict.' + attr_name), [attr_base] + args, is_builtin=True), node)
+                return _cl(AstCall(AstSymbol('dict.' + attr_name, predef=True), [attr_base] + args,
+                                   is_builtin=True), node)
             return _cl(AstCall(AstAttribute(attr_base, attr_name), args, keywords), node)
 
         elif isinstance(node.func, ast.Name):
@@ -214,7 +216,7 @@ class PythonParser(ast.NodeVisitor):
                 result = AstObserve(args[0], args[1])
             elif name in ('abs', 'divmod', 'filter', 'format', 'len', 'map', 'max', 'min', 'pow', 'print', 'range',
                           'reversed', 'round', 'sorted', 'sum', 'zip'):
-                result = AstCall(AstSymbol(name), args, keywords, is_builtin=True)
+                result = AstCall(AstSymbol(name, predef=True), args, keywords, is_builtin=True)
             else:
                 result = AstCall(AstSymbol(name), args, keywords)
             return _cl(result, node)

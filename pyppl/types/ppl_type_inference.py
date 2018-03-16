@@ -4,9 +4,9 @@
 # License: MIT (see LICENSE.txt)
 #
 # 19. Feb 2018, Tobias Kohn
-# 09. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
-from .ppl_ast import *
+from pyppl.ppl_ast import *
 from .ppl_types import *
 
 class TypeInferencer(Visitor):
@@ -30,15 +30,18 @@ class TypeInferencer(Visitor):
             result = self.parent.resolve(name)
             if isinstance(result, Type):
                 return result
-            elif hasattr(result, 'get_type'):
-                return result.get_type()
+            elif isinstance(result, AstNode):
+                return self.visit(result)
         return None
 
     def get_value_of(self, node: AstNode):
         if isinstance(node, AstValue):
             return node.value
-        else:
-            return None
+        elif is_call(node, 'len') and node.arg_count == 1:
+            result = self.visit(node.args[0])
+            if isinstance(result, SequenceType):
+                return result.size
+        return None
 
 
     def visit_binary(self, node: AstBinary):
@@ -55,6 +58,9 @@ class TypeInferencer(Visitor):
     def visit_call(self, node: AstCall):
         return AnyType
 
+    def visit_call_len(self, _):
+        return Integer
+
     def visit_call_range(self, node: AstCall):
         if node.arg_count == 2:
             a = self.get_value_of(node.args[0])
@@ -66,6 +72,15 @@ class TypeInferencer(Visitor):
             if a is not None:
                 return List[Integer][a]
         return List[Integer]
+
+    def visit_call_torch_function(self, node: AstCall):
+        name = node.function_name
+        args = [self.visit(arg) for arg in node.args]
+        if name == 'torch.tensor' and node.arg_count == 1:
+            if isinstance(args[0], SequenceType):
+                result = Tensor[args[0].item, args[0].size]
+                return result
+        return Tensor
 
     def visit_compare(self, _):
         return Boolean

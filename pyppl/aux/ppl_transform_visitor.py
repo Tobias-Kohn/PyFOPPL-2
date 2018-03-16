@@ -4,9 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 15. Mar 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
+from ast import copy_location as _cl
 
 class TransformVisitor(Visitor):
 
@@ -57,7 +58,7 @@ class TransformVisitor(Visitor):
         if items is node.items:
             return node
         else:
-            return node.clone(items=items)
+            return _cl(makeBody(items), node)
 
     def visit_call(self, node: AstCall):
         function = self.visit(node.function)

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -587,11 +587,14 @@ class AstCall(AstNode):
             call_name = 'visit_call_' + name
             for ch in ('+', '-', '.', '/', '*'):
                 call_name = call_name.replace(ch, '_')
-            result = [call_name] + super().get_visitor_names()
+            result = [call_name]
             if self.is_builtin:
-                builtin_name = 'visit_builtin_' + name
+                builtin_name = 'visit_builtin_' + name.replace('.', '_')
                 result = [builtin_name] + result
-            return result
+            mod_name = self.function_module
+            if mod_name is not None:
+                result.append('visit_call_{}_function'.format(mod_name))
+            return result + super().get_visitor_names()
         else:
             return super().get_visitor_names()
 
@@ -614,6 +617,14 @@ class AstCall(AstNode):
                 return None
         else:
             return None
+
+    @property
+    def function_module(self):
+        if isinstance(self.function, AstSymbol):
+            name = self.function.original_name
+            if '.' in name:
+                return name[:name.index('.')]
+        return None
 
     @property
     def has_keyword_args(self):
@@ -1480,6 +1491,12 @@ def is_boolean_true(node:AstNode):
     else:
         return False
 
+def is_call(node:AstNode, name:Optional[str]=None):
+    if isinstance(node, AstCall):
+        return (name is None) or (node.function_name == name)
+    else:
+        return False
+
 def is_constant(node:AstNode):
     return isinstance(node, AstValue) or isinstance(node, AstValueVector)
 
@@ -1495,8 +1512,11 @@ def is_empty(node:AstNode):
     else:
         return False
 
-def is_function(node:AstNode):
-    return isinstance(node, AstFunction)
+def is_function(node:AstNode, name:Optional[str]=None):
+    if isinstance(node, AstFunction):
+        return (name is None) or node.function_name == name
+    else:
+        return False
 
 def is_integer(node:AstNode):
     if isinstance(node, AstValue):
@@ -1556,6 +1576,9 @@ def is_unary_not(node:AstNode):
         return node.op == 'not'
     else:
         return False
+
+def is_value(node:AstNode):
+    return isinstance(node, AstValue) or isinstance(node, AstValueVector)
 
 def is_vector(node:AstNode):
     return isinstance(node, AstValueVector) or isinstance(node, AstVector)

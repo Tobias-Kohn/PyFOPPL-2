@@ -4,10 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Mar 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 16. Mar 2018, Tobias Kohn
 #
+from pyppl.types import ppl_types
+from .types import ppl_type_inference
 from .ppl_ast import *
-from . import ppl_types, ppl_type_inference
 from .ppl_namespaces import namespace_from_module
 
 _symbol_counter = 1000
