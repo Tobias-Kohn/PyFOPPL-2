@@ -25,6 +25,8 @@ class GraphCodeGenerator(object):
 
         if self.imports is not None:
             imports = self.imports + "\n" + imports
+        if base_class is None:
+            base_class = ''
         result = ["# {}".format(datetime.datetime.now()),
                   imports,
                   "class {}({}):".format(class_name, base_class)]
