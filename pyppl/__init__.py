@@ -10,9 +10,10 @@ from typing import Optional
 from . import distributions, parser
 from .backend import ppl_graph_generator
 
-def compile_model(source, language: Optional[str]=None):
-    print("NAMESPACE:", distributions.namespace)
+def compile_model(source, *, language: Optional[str]=None, imports=None):
+    if type(imports) in (list, set, tuple):
+        imports = '\n'.join(imports)
     ast = parser.parse(source, language=language, namespace=distributions.namespace)
     gg = ppl_graph_generator.GraphGenerator()
     gg.visit(ast)
-    return gg.generate_model()
+    return gg.generate_model(imports=imports)

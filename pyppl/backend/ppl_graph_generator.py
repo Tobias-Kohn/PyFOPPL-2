@@ -259,14 +259,18 @@ class GraphGenerator(ScopedVisitor):
         result = makeVector(items)
         return result, parents
 
-    def generate_code(self):
+    def generate_code(self, imports: Optional[str]=None):
         if len(self.imports) > 0:
-            imports = '\n'.join(['import {}'.format(item) for item in self.imports])
+            _imports = '\n'.join(['import {}'.format(item) for item in self.imports])
+            if imports is not None:
+                _imports += '\n' + imports
+        elif imports is not None:
+            _imports = imports
         else:
-            imports = ''
-        return self.factory.generate_code(class_name='Model', imports=imports)
+            _imports = ''
+        return self.factory.generate_code(class_name='Model', imports=_imports)
 
-    def generate_model(self):
+    def generate_model(self, imports: Optional[str]=None):
         vertices = set()
         arcs = set()
         data = set()
@@ -281,7 +285,7 @@ class GraphGenerator(ScopedVisitor):
             elif isinstance(node, ConditionNode):
                 conditionals.add(node)
 
-        code = self.generate_code()
+        code = self.generate_code(imports=imports)
         c_globals = {}
         exec(code, c_globals)
         Model = c_globals['Model']
