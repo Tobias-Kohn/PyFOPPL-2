@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 15. Mar 2018, Tobias Kohn
+# 19. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 
@@ -41,7 +41,7 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None, namesp
             result = ppl_python_parser.parse(source)
 
         elif lang in ['clj', 'clojure']:
-            result = ppl_clojure_parser.parse(source)
+            result = ppl_foppl_parser.parse(source)
 
         elif lang == 'foppl':
             result = ppl_foppl_parser.parse(source)

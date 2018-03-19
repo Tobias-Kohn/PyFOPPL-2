@@ -7,6 +7,7 @@
 # 19. Mar 2018, Tobias Kohn
 #
 from typing import Optional
+from pyppl import distributions
 
 
 class GraphNode(object):
@@ -135,18 +136,13 @@ class Vertex(GraphNode):
       The set of ancestors used for the distribution/sampling, without those used inside the conditions.
     `cond_ancestors`:
       The set of ancestors, which are linked through conditionals.
-    `data`:
-      A set of all data nodes, which provide data used in this vertex.
-    `distribution`:
-      The distribution is an AST/IR-structure, which is usually not used directly, but rather for internal purposes,
-      such as extracting the name and type of the distribution.
     `distribution_name`:
       The name of the distribution, such as `Normal` or `Gamma`.
     `distribution_type`:
       Either `"continuous"` or `"discrete"`. You will usually query this field using one of the properties
       `is_continuous` or `is_discrete`.
     `observation`:
-      The observation in an AST/IR-structure, which is usually not used directly, but rather for internal purposes.
+      The observation as a string containing Python-code.
     `conditions`:
       The set of all conditions under which this vertex is evaluated. Each item in the set is actually a tuple of
       a `ConditionNode` and a boolean value, to which the condition should evaluate. Note that the conditions are
@@ -156,33 +152,35 @@ class Vertex(GraphNode):
       vertex in their `get_all_ancestors`-set.
     `sample_size`:
       The dimension of the samples drawn from this distribution.
-    `support_size`:
-      Used for the 'categorical' distribution; basically the length of the vector/list in the first argument.
-    `code`:
-      The original code for the `evaluate`-method as a string. This is mostly used for debugging.
     """
 
     def __init__(self, name: str, *,
                  ancestors: Optional[set]=None,
-                 dist_code: str,
+                 conditions: Optional[set]=None,
+                 distribution_code: str,
+                 distribution_args: Optional[list]=None,
+                 distribution_func: Optional[str]=None,
                  distribution_name: str,
-                 sample_size: int = 1,
                  observation: Optional[str]=None,
                  observation_value: Optional=None,
-                 conditions: Optional[set]=None,
+                 sample_size: int = 1,
                  line_number: int = -1):
         super().__init__(name, ancestors)
-        self.dist_code = dist_code
+        self.distribution_args = distribution_args
+        self.conditions = conditions
+        self.distribution_code = distribution_code
+        self.distribution_func = distribution_func
         self.distribution_name = distribution_name
-        self.sample_size = sample_size
+        self.distribution_type = distributions.get_distribution_for_name(distribution_name)
         self.observation = observation
         self.observation_value = observation_value
-        self.conditions = conditions
         self.line_number = line_number
+        self.sample_size = sample_size
+        self.dependent_conditions = set()
 
     def __repr__(self):
         args = {
-            "Dist-Code": self.dist_code,
+            "Dist-Code": self.distribution_code,
             "Dist-Name": self.distribution_name,
             "Sample-Size": self.sample_size,
         }
@@ -190,9 +188,43 @@ class Vertex(GraphNode):
             args["Observation"] = self.observation
         return self.create_repr("Vertex", **args)
 
-    def get_code(self):
-        return self.dist_code
+    def get_code(self, **flags):
+        if self.distribution_func is not None and self.distribution_args is not None:
+            args = self.distribution_args[:]
+            for key in flags:
+                args.append("{}={}".format(key, flags[key]))
+            return "{}({})".format(self.distribution_func, ', '.join(args))
+        return self.distribution_code
 
     @property
     def has_observation(self):
         return self.observation is not None
+
+    @property
+    def get_all_ancestors(self):
+        result = []
+        for a in self.ancestors:
+            if a not in result:
+                result.append(a)
+                result += list(a.get_all_ancestors())
+        return set(result)
+
+    @property
+    def is_conditional(self):
+        return len(self.dependent_conditions) > 0
+
+    @property
+    def is_continuous(self):
+        return self.distribution_type == str(distributions.DistributionType.CONTINUOUS)
+
+    @property
+    def is_discrete(self):
+        return self.distribution_type == str(distributions.DistributionType.DISCRETE)
+
+    @property
+    def is_observed(self):
+        return self.observation is not None
+
+    @property
+    def is_sampled(self):
+        return self.observation is None

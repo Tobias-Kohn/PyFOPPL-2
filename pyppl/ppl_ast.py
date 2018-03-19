@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 16. Mar 2018, Tobias Kohn
+# 19. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -648,6 +648,12 @@ class AstCall(AstNode):
             return True
         else:
             return False
+
+    def add_keywords_to_args(self, args: list):
+        if len(self.keywords) > 0:
+            kw = [''] * (len(args) - len(self.keywords)) + [item+'=' for item in self.keywords]
+            return [a + b for a, b in zip(kw, args)]
+        return args
 
 
 class AstCompare(AstOperator):

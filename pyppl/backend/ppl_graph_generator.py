@@ -8,6 +8,7 @@
 #
 from pyppl.ppl_ast import *
 from .ppl_graph_factory import GraphFactory
+from pyppl.graphs import *
 
 
 class ConditionScope(object):
@@ -40,13 +41,14 @@ class ConditionScopeContext(object):
 
 class GraphGenerator(ScopedVisitor):
 
-    def __init__(self, factory: GraphFactory):
+    def __init__(self, factory: Optional[GraphFactory]=None):
         super().__init__()
         if factory is None:
             factory = GraphFactory()
         self.factory = factory
         self.nodes = []
         self.conditions = None  # type: ConditionScope
+        self.imports = set()
 
     def enter_condition(self, condition):
         self.conditions = ConditionScope(self.conditions, condition)
@@ -159,7 +161,8 @@ class GraphGenerator(ScopedVisitor):
 
         return AstIf(test, a_node, b_node), parents
 
-    def visit_import(self, _):
+    def visit_import(self, node: AstImport):
+        self.imports.add(node.module_name)
         return AstValue(None), set()
 
     def visit_let(self, node: AstLet):
@@ -256,5 +259,32 @@ class GraphGenerator(ScopedVisitor):
         result = makeVector(items)
         return result, parents
 
-    def generate_code(self, model_template: str = None):
-        return self.factory.generate_code(model_template=model_template)
+    def generate_code(self):
+        if len(self.imports) > 0:
+            imports = '\n'.join(['import {}'.format(item) for item in self.imports])
+        else:
+            imports = ''
+        return self.factory.generate_code(class_name='Model', imports=imports)
+
+    def generate_model(self):
+        vertices = set()
+        arcs = set()
+        data = set()
+        conditionals = set()
+        for node in self.nodes:
+            if isinstance(node, Vertex):
+                vertices.add(node)
+                for a in node.ancestors:
+                    arcs.add((a, node))
+            elif isinstance(node, DataNode):
+                data.add(node)
+            elif isinstance(node, ConditionNode):
+                conditionals.add(node)
+
+        code = self.generate_code()
+        c_globals = {}
+        exec(code, c_globals)
+        Model = c_globals['Model']
+        result = Model(vertices, arcs, data, conditionals)
+        result.code = code
+        return result

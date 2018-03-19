@@ -6,3 +6,13 @@
 # 07. Feb 2018, Tobias Kohn
 # 07. Feb 2018, Tobias Kohn
 #
+from typing import Optional
+from . import distributions, parser
+from .backend import ppl_graph_generator
+
+def compile_model(source, language: Optional[str]=None):
+    print("NAMESPACE:", distributions.namespace)
+    ast = parser.parse(source, language=language, namespace=distributions.namespace)
+    gg = ppl_graph_generator.GraphGenerator()
+    gg.visit(ast)
+    return gg.generate_model()

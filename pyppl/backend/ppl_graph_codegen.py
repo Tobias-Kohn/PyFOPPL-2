@@ -6,34 +6,109 @@
 # 12. Mar 2018, Tobias Kohn
 # 19. Mar 2018, Tobias Kohn
 #
+import datetime
 from pyppl.graphs import *
 from pyppl.ppl_ast import *
 
 
-DEFAULT_MODEL_TEMPLATE = """
-class Model(object):
-
-    def gen_log_pdf(self, state):
-        log_pdf = 0
-        {LOGPDF-CODE}
-        return log_pdf
-
-    def gen_sample(self):
-        state = {}
-        {SAMPLE-CODE}
-        return state
-"""
-
-
 class GraphCodeGenerator(object):
 
-    def __init__(self, nodes: list, state_object: Optional[str]=None):
+    def __init__(self, nodes: list, state_object: Optional[str]=None, imports: Optional[str]=None):
         self.nodes = nodes
         self.state_object = state_object
+        self.imports = imports
 
-    def gen_logpdf_code(self) -> str:
+    def generate_model_code(self, *,
+                            class_name: str='Model',
+                            base_class: str='',
+                            imports: str='') -> str:
+
+        if self.imports is not None:
+            imports = self.imports + "\n" + imports
+        result = ["# {}".format(datetime.datetime.now()),
+                  imports,
+                  "class {}({}):".format(class_name, base_class)]
+
+        doc_str = self.generate_doc_string()
+        if doc_str is not None:
+            result.append('\t"""\n\t{}\n\t"""'.format(doc_str.replace('\n', '\n\t')))
+        result.append('')
+
+        init_method = self.generate_init_method()
+        if init_method is not None:
+            result.append('\t' + init_method.replace('\n', '\n\t'))
+
+        repr_method = self.generate_repr_method()
+        if repr_method is not None:
+            result.append('\t' + repr_method.replace('\n', '\n\t'))
+
+        methods = [x for x in dir(self) if x.startswith('gen_') or x.startswith('get_')]
+        for method in methods:
+            code = getattr(self, method)()
+            if type(code) is tuple and len(code) == 2:
+                args, code = code
+                args = 'self, ' + args
+            else:
+                args = 'self'
+            code = code.replace('\n', '\n\t\t')
+            result.append("\tdef {}({}):\n\t\t{}\n".format(method, args, code))
+
+        return '\n'.join(result)
+
+    def generate_doc_string(self):
+        return None
+
+    def generate_init_method(self):
+        return "def __init__(self, vertices: set, arcs: set, data: set, conditionals: set):\n" \
+               "\tsuper().__init__()\n" \
+               "\tself.vertices = vertices\n" \
+               "\tself.arcs = arcs\n" \
+               "\tself.data = data\n" \
+               "\tself.conditionals = conditionals\n"
+
+    def generate_repr_method(self):
+        s = "def __repr__(self):\n" \
+            "\tV = '\\n'.join(sorted([repr(v) for v in self.vertices]))\n" \
+            "\tA = ', '.join(['({}, {})'.format(u.name, v.name) for (u, v) in self.arcs]) if len(self.arcs) > 0 else '  -'\n" \
+            "\tC = '\\n'.join(sorted([repr(v) for v in self.conditionals])) if len(self.conditionals) > 0 else '  -'\n" \
+            "\tD = '\\n'.join([repr(u) for u in self.data]) if len(self.data) > 0 else '  -'\n" \
+            "\tgraph = 'Vertices V:\\n{V}\\nArcs A:\\n  {A}\\n\\nConditions C:\\n{C}\\n\\nData D:\\n{D}\\n'.format(V=V, A=A, C=C, D=D)\n" \
+            "\treturn graph\n"
+        return s
+
+    def get_vertices(self):
+        return "return self.vertices"
+
+    def get_vertices_names(self):
+        return "return [v.name for v in self.vertices]"
+
+    def get_arcs(self):
+        return "return self.arcs"
+
+    def get_arcs_names(self):
+        return "return [(u.name, v.name) for (u, v) in self.arcs]"
+
+    def get_conditions(self):
+        return "return self.conditionals"
+
+    def gen_cond_vars(self):
+        return "return [c.name for c in self.conditionals]"
+
+    def gen_if_vars(self):
+        return "return [v.name for v in self.vertices if v.is_conditional and v.is_sampled and v.is_continuous]"
+
+    def gen_cont_vars(self):
+        return "return [v.name for v in self.vertices if v.is_continuous and not v.is_conditional and v.is_sampled]"
+
+    def gen_disc_vars(self):
+        return "return [v.name for v in self.vertices if v.is_discrete and v.is_sampled]"
+
+    def get_vars(self):
+        return "return [v.name for v in self.vertices if v.is_sampled]"
+
+    def gen_log_pdf(self):
         distribution = None
-        logpdf_code = []
+        logpdf_code = ["log_pdf = 0"]
         state = self.state_object
         for node in self.nodes:
             name = node.name
@@ -47,19 +122,41 @@ class GraphCodeGenerator(object):
                     distribution = code
                 logpdf_code.append("log_pdf += dst_.log_pdf({})".format(name))
 
-            elif isinstance(node, DataNode):
-                pass
-
-            else:
+            elif not isinstance(node, DataNode):
                 code = "{} = {}".format(name, node.get_code())
                 logpdf_code.append(code)
 
-        return '\n'.join(logpdf_code)
+        logpdf_code.append("return log_pdf")
+        return 'state', '\n'.join(logpdf_code)
 
-    def gen_sample_code(self) -> str:
+    def gen_log_pdf_transformed(self):
         distribution = None
-        sample_code = []
+        logpdf_code = ["log_pdf = 0"]
         state = self.state_object
+        for node in self.nodes:
+            name = node.name
+            if state is not None:
+                name = "{}['{}']".format(state, name)
+
+            if isinstance(node, Vertex):
+                code = "dst_ = {}".format(node.get_code(transformed=True))
+                if code != distribution:
+                    logpdf_code.append(code)
+                    distribution = code
+                logpdf_code.append("log_pdf += dst_.log_pdf({})".format(name))
+
+            elif not isinstance(node, DataNode):
+                code = "{} = {}".format(name, node.get_code())
+                logpdf_code.append(code)
+
+        logpdf_code.append("return log_pdf")
+        return 'state', '\n'.join(logpdf_code)
+
+    def gen_prior_samples(self):
+        distribution = None
+        state = self.state_object
+        if state is not None:
+            sample_code = [state + " = {}"]
         for node in self.nodes:
             name = node.name
             if state is not None:
@@ -82,30 +179,6 @@ class GraphCodeGenerator(object):
                 code = "{} = {}".format(name, node.get_code())
                 sample_code.append(code)
 
+        if state is not None:
+            sample_code.append("return " + state)
         return '\n'.join(sample_code)
-
-    def generate_model_code(self) -> str:
-        model_template = DEFAULT_MODEL_TEMPLATE
-
-        def get_indent(pos):
-            i = pos
-            while i > 0 and model_template[i-1] in ('\t', ' '):
-                i -= 1
-            return model_template[i:pos]
-
-        # get the code...
-        logpdf_code = self.gen_logpdf_code()
-        sample_code = self.gen_sample_code()
-
-        # glue everything together...
-        logpdf_index = model_template.index("{LOGPDF-CODE}")
-        logpdf_indent = get_indent(logpdf_index)
-        sample_index = model_template.index("{SAMPLE-CODE}")
-        sample_indent = get_indent(sample_index)
-
-        logpdf_code = logpdf_code.replace('\n', '\n' + logpdf_indent)
-        sample_code = sample_code.replace('\n', '\n' + sample_indent)
-
-        model_template = model_template.replace("{LOGPDF-CODE}", logpdf_code)
-        model_template = model_template.replace("{SAMPLE-CODE}", sample_code)
-        return model_template
