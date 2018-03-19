@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Mar 2018, Tobias Kohn
-# 16. Mar 2018, Tobias Kohn
+# 19. Mar 2018, Tobias Kohn
 #
 from pyppl.types import ppl_types
 from .types import ppl_type_inference
@@ -221,6 +221,7 @@ class SymbolTableGenerator(ScopedVisitor):
         if node.original_name in self.namespace:
             node.name = self.namespace[node.original_name]
             node.original_name = node.name
+            node.predef = True
         if not node.predef:
             symbol = self.use_symbol(node.original_name)
             node.symbol = symbol

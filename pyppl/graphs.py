@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 16. Mar 2018, Tobias Kohn
+# 19. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 
@@ -59,6 +59,9 @@ class GraphNode(object):
             result = []
         result.insert(0, fmt.format("Ancestors:", ', '.join([item.name for item in self.ancestors])))
         result.insert(0, fmt.format("Name:", self.name))
+        line_no = getattr(self, 'line_number', -1)
+        if line_no > 0:
+            result.append(fmt.format("Line:", line_no))
         return "{}\n{}".format(caption, '\n'.join(result))
 
     def __repr__(self):
@@ -89,18 +92,6 @@ class ConditionNode(GraphNode):
     def __repr__(self):
         return self.create_repr("Condition", Condition=self.cond_code)
 
-    def gen_log_pdf_code(self, state_object: Optional[str] = None):
-        target = "{}" if state_object is None else state_object + "['{}']"
-        target = target.format(self.name)
-        result = self.cond_code
-        return "{} = {}".format(target, result)
-
-    def gen_sampling_code(self, state_object: Optional[str] = None):
-        target = "{}" if state_object is None else state_object + "['{}']"
-        target = target.format(self.name)
-        result = self.cond_code
-        return "{} = {}".format(target, result)
-
     def get_code(self):
         return self.cond_code
 
@@ -117,18 +108,6 @@ class DataNode(GraphNode):
 
     def __repr__(self):
         return self.create_repr("Data", Data=self.data_code)
-
-    def gen_log_pdf_code(self, state_object: Optional[str] = None):
-        target = "{}" if state_object is None else state_object + "['{}']"
-        target = target.format(self.name)
-        result = self.data_code
-        return "{} = {}".format(target, result)
-
-    def gen_sampling_code(self, state_object: Optional[str] = None):
-        target = "{}" if state_object is None else state_object + "['{}']"
-        target = target.format(self.name)
-        result = self.data_code
-        return "{} = {}".format(target, result)
 
     def get_code(self):
         return self.data_code
@@ -183,25 +162,37 @@ class Vertex(GraphNode):
       The original code for the `evaluate`-method as a string. This is mostly used for debugging.
     """
 
-    def __init__(self, name: str, *, ancestors: Optional[set]=None, dist_code: str, sample_size: int = 1):
+    def __init__(self, name: str, *,
+                 ancestors: Optional[set]=None,
+                 dist_code: str,
+                 distribution_name: str,
+                 sample_size: int = 1,
+                 observation: Optional[str]=None,
+                 observation_value: Optional=None,
+                 conditions: Optional[set]=None,
+                 line_number: int = -1):
         super().__init__(name, ancestors)
         self.dist_code = dist_code
+        self.distribution_name = distribution_name
         self.sample_size = sample_size
+        self.observation = observation
+        self.observation_value = observation_value
+        self.conditions = conditions
+        self.line_number = line_number
 
     def __repr__(self):
-        return self.create_repr("Vertex", DistCode=self.dist_code)
-
-    def gen_log_pdf_code(self, state_object: Optional[str] = None):
-        target = "{}" if state_object is None else state_object + "['{}']"
-        target = target.format(self.name)
-        result = self.dist_code
-        return "{}_dist = {}\nlog_pdf += {}_dist.pdf({})".format(self.name, result, self.name, target)
-
-    def gen_sampling_code(self, state_object: Optional[str] = None):
-        target = "{}" if state_object is None else state_object + "['{}']"
-        target = target.format(self.name)
-        result = self.dist_code
-        return "{}_dist = {}\n{} = {}_dist.sample()".format(self.name, result, target, self.name)
+        args = {
+            "Dist-Code": self.dist_code,
+            "Dist-Name": self.distribution_name,
+            "Sample-Size": self.sample_size,
+        }
+        if self.observation is not None:
+            args["Observation"] = self.observation
+        return self.create_repr("Vertex", **args)
 
     def get_code(self):
         return self.dist_code
+
+    @property
+    def has_observation(self):
+        return self.observation is not None

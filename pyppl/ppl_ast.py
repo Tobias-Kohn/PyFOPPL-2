@@ -1203,6 +1203,10 @@ class AstValueVector(AstLeaf):
     def non_empty(self):
         return len(self.items) != 0
 
+    @property
+    def value(self):
+        return self.items
+
 
 class AstVector(AstNode):
 

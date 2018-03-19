@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 16. Mar 2018, Tobias Kohn
+# 19. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from .ppl_graph_factory import GraphFactory
@@ -82,7 +82,11 @@ class GraphGenerator(ScopedVisitor):
         raise RuntimeError("cannot compile '{}'".format(node))
 
     def visit_attribute(self, node:AstAttribute):
-        return self.visit_node(node)
+        base, parents = self.visit(node.base)
+        if base is node.base:
+            return node, parents
+        else:
+            return AstAttribute(base, node.attr), parents
 
     def visit_binary(self, node:AstBinary):
         left, l_parents = self.visit(node.left)
@@ -94,8 +98,24 @@ class GraphGenerator(ScopedVisitor):
         return makeBody(items), parents
 
     def visit_call(self, node: AstCall):
-        args, parents = self._visit_items(node.args)
-        return AstCall(node.function, args, node.keywords), parents
+        function, f_parents = self.visit(node.function)
+        args, a_parents = self._visit_items(node.args)
+        parents = set.union(f_parents, a_parents)
+        return AstCall(function, args, node.keywords), parents
+
+    def visit_call_torch_function(self, node: AstCall):
+        name = node.function_name
+        if name.startswith("torch.") and node.arg_count == 1 and isinstance(node.args[0], AstValueVector):
+            name = name[6:]
+            if name in ('tensor', 'Tensor', 'FloatTensor', 'IntTensor', 'DoubleTensor', 'HalfTensor',
+                        'ByteTensor', 'ShortTensor', 'LongTensor'):
+                node = self.factory.create_data_node(node)
+                if node is not None:
+                    name = getattr(node, 'name', 'data_???')
+                    self.nodes.append(node)
+                    return AstSymbol(name, node=node), set()
+
+        return self.visit_call(node)
 
     def visit_compare(self, node: AstCompare):
         left, l_parents = self.visit(node.left)
@@ -210,6 +230,8 @@ class GraphGenerator(ScopedVisitor):
             return item
         elif node.node is not None:
             return node, { node.node }
+        elif node.predef:
+            return node, set()
         else:
             raise RuntimeError("symbol not found: '{}'".format(node.original_name))
 
@@ -222,7 +244,7 @@ class GraphGenerator(ScopedVisitor):
 
     def visit_value_vector(self, node: AstValueVector):
         if len(node) > 3:
-            node = self.factory.create_data_node(node, set())
+            node = self.factory.create_data_node(node)
             if node is not None:
                 name = getattr(node, 'name', 'data_???')
                 self.nodes.append(node)
