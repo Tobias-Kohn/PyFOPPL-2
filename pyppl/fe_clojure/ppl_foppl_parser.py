@@ -4,10 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 21. Feb 2018, Tobias Kohn
-# 22. Feb 2018, Tobias Kohn
+# 20. Mar 2018, Tobias Kohn
 #
-from pyppl.fe_clojure import ppl_clojure_forms as clj
-from pyppl.ppl_ast import *
+from ..fe_clojure import ppl_clojure_forms as clj
+from ..ppl_ast import *
 from .ppl_clojure_lexer import ClojureLexer
 from .ppl_clojure_parser import ClojureParser
 

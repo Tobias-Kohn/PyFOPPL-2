@@ -4,11 +4,11 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Feb 2018, Tobias Kohn
-# 27. Feb 2018, Tobias Kohn
+# 20. Mar 2018, Tobias Kohn
 #
-from pyppl import lexer
-from pyppl.fe_clojure import ppl_clojure_forms as clj
-from pyppl.lexer import CatCode, TokenType
+from .. import lexer
+from ..fe_clojure import ppl_clojure_forms as clj
+from ..lexer import CatCode, TokenType
 
 
 #######################################################################################################################

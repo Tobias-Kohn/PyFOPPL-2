@@ -6,8 +6,8 @@
 # 20. Mar 2018, Tobias Kohn
 # 20. Mar 2018, Tobias Kohn
 #
-from pyppl.ppl_ast import *
-from pyppl.aux.ppl_transform_visitor import TransformVisitor
+from ..ppl_ast import *
+from ..aux.ppl_transform_visitor import TransformVisitor
 
 
 class FunctionInliner(TransformVisitor):
@@ -43,6 +43,8 @@ class FunctionInliner(TransformVisitor):
                 for p, a in zip(reversed(params), reversed(args)):
                     if p != '_' and not isinstance(a, AstSymbol):
                         result = AstLet(p + tmp, a, result)
+                    elif not isinstance(a, AstSymbol):
+                        result = makeBody(a, result)
                 return result
 
         return super().visit_call(node)

@@ -8,9 +8,7 @@
 #
 from typing import Optional
 
-from pyppl.transforms import ppl_simplifier
-from pyppl.transforms import ppl_raw_simplifier
-from pyppl.transforms import ppl_functions_inliner
+from .transforms import ppl_simplifier, ppl_raw_simplifier, ppl_functions_inliner, ppl_symbol_simplifier
 from . import ppl_symbol_table, ppl_ast
 from .fe_clojure import ppl_foppl_parser
 from .fe_python import ppl_python_parser
@@ -61,4 +59,5 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None, namesp
         sym_table.visit(result)
         result = ppl_simplifier.simplify(result, sym_table.symbols)
 
+    result = ppl_symbol_simplifier.SymbolSimplifier().visit(result)
     return result

@@ -514,6 +514,7 @@ class AstBody(AstNode):
         self.context = context
         assert type(self.items) is list
         assert all([isinstance(item, AstNode) for item in self.items])
+        assert all([not isinstance(item, AstBody) for item in self.items]), self.items
 
     def __getitem__(self, item):
         return self.items[item]
@@ -1368,9 +1369,17 @@ def makeBody(*items):
     items = b_items
 
     i = 0
-    while i < len(items) - 1:
+    while i < len(items):
         node = items[i]
-        if isinstance(node, AstBreak) or isinstance(node, AstReturn):
+        if isinstance(node, AstBody):
+            del items[i]
+            for itm in reversed(node.items):
+                items.insert(i, itm)
+
+        elif i+1 == len(items):
+            i += 1
+
+        elif isinstance(node, AstBreak) or isinstance(node, AstReturn):
             items = items[:i]
             break
 
@@ -1380,11 +1389,6 @@ def makeBody(*items):
         elif isinstance(node, AstBinary):
             items[i] = node.right
             items.insert(i, node.left)
-
-        elif isinstance(node, AstBody):
-            del items[i]
-            for itm in reversed(node.items):
-                items.insert(i, itm)
 
         elif isinstance(node, AstCompare):
             items[i] = node.right
