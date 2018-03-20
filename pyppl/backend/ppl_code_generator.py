@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 02. Mar 2018, Tobias Kohn
-# 16. Mar 2018, Tobias Kohn
+# 20. Mar 2018, Tobias Kohn
 #
 from pyppl.ppl_ast import *
 from pyppl.ppl_ast_annotators import get_info
@@ -228,7 +228,11 @@ class CodeGenerator(ScopedVisitor):
 
     def visit_let(self, node: AstLet):
         name = _normalize_name(node.original_target if self.short_names else node.target)
-        return "{} = {}\n{}".format(name, self.visit(node.source), self.visit(node.body))
+        if isinstance(node.source, AstLet):
+            result = self.visit(AstDef(node.target, node.source))
+            return result + "\n{}".format(self.visit(node.body))
+        else:
+            return "{} = {}\n{}".format(name, self.visit(node.source), self.visit(node.body))
 
     def visit_list_for(self, node: AstListFor):
         name = _normalize_name(node.original_target if self.short_names else node.target)
