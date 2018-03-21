@@ -4,12 +4,13 @@
 # License: MIT (see LICENSE.txt)
 #
 # 22. Feb 2018, Tobias Kohn
-# 20. Mar 2018, Tobias Kohn
+# 21. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 
-from .transforms import ppl_simplifier, ppl_raw_simplifier, ppl_functions_inliner, ppl_symbol_simplifier
-from . import ppl_symbol_table, ppl_ast
+from .transforms import (ppl_new_simplifier, ppl_raw_simplifier, ppl_functions_inliner,
+                         ppl_symbol_simplifier, ppl_static_assignments)
+from . import ppl_ast
 from .fe_clojure import ppl_foppl_parser
 from .fe_python import ppl_python_parser
 
@@ -50,14 +51,13 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None, namesp
     if result is not None:
         raw_sim = ppl_raw_simplifier.RawSimplifier()
         result = raw_sim.visit(result)
-        if simplify or True:
+        if simplify:
             result = ppl_functions_inliner.FunctionInliner().visit(result)
             result = raw_sim.visit(result)
 
     if simplify and result is not None:
-        sym_table = ppl_symbol_table.SymbolTableGenerator()
-        sym_table.visit(result)
-        result = ppl_simplifier.simplify(result, sym_table.symbols)
+        result = ppl_static_assignments.StaticAssignments().visit(result)
+        result = ppl_new_simplifier.Simplifier().visit(result)
 
     result = ppl_symbol_simplifier.SymbolSimplifier().visit(result)
     return result

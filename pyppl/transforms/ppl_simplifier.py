@@ -26,6 +26,9 @@ from ..types import ppl_types, ppl_type_inference
 #   protect them, making them kind of "read-only".
 
 
+print("!!!DEPRECATED!!!")
+
+
 def _all_(coll, p):
     return all([p(item) for item in coll])
 

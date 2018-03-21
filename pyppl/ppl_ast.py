@@ -796,7 +796,7 @@ class AstFor(AstControl):
         self.original_target = target if original_target is None else original_target
         assert type(target) is str
         assert isinstance(source, AstNode)
-        assert isinstance(body, AstNode)
+        assert isinstance(body, AstNode), body
 
     def __repr__(self):
         return "for {} in {}: ({})".format(self.target, repr(self.source), repr(self.body))

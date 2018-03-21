@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 09. Mar 2018, Tobias Kohn
-# 16. Mar 2018, Tobias Kohn
+# 21. Mar 2018, Tobias Kohn
 #
 from ast import copy_location as _cl
 from ..ppl_ast import *
@@ -94,8 +94,7 @@ class RawSimplifier(Visitor):
         if value is node.value:
             return node
         else:
-            return _cl(AstDef(node.name, value, original_name=node.original_name,
-                              global_context=node.global_context), node)
+            return node.clone(value=value)
 
     def visit_dict(self, node: AstDict):
         if len(node) > 0:
@@ -173,8 +172,7 @@ class RawSimplifier(Visitor):
         if target is node.target and source is node.source and expr is node.expr:
             return node
         else:
-            return _cl(makeBody(prefix,
-                                AstListFor(target, source, expr, original_target=node.original_target)), node)
+            return makeBody(prefix, node.clone(target=target, source=source, expr=expr))
 
     def visit_observe(self, node: AstObserve):
         d_prefix, dist = self._visit_expr(node.dist)
