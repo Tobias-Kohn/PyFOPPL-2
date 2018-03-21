@@ -19,7 +19,12 @@ class Simplifier(TransformVisitor):
 
     def __init__(self):
         super().__init__()
+        self.type_inferencer = ppl_type_inference.TypeInferencer(self)
         self.bindings = {}
+
+    def get_type(self, node: AstNode):
+        result = self.type_inferencer.visit(node)
+        return result
 
     def define_name(self, name: str, value):
         if name not in ('', '_'):
@@ -164,6 +169,28 @@ class Simplifier(TransformVisitor):
         else:
             return node.clone(args=args)
 
+    def visit_call_len(self, node: AstCall):
+        if node.arg_count == 1:
+            arg = self.visit(node.args[0])
+            if is_vector(arg):
+                return AstValue(len(arg))
+            arg_type = self.get_type(arg)
+            if isinstance(arg_type, ppl_types.SequenceType):
+                if arg_type.size is not None:
+                    return AstValue(arg_type.size)
+        return self.visit_call(node)
+
+    def visit_call_range(self, node:AstCall):
+        args = [self.visit(arg) for arg in node.args]
+        if 1 <= len(args) <= 2 and all([is_integer(arg) for arg in args]):
+            if len(args) == 1:
+                result = range(args[0].value)
+            else:
+                result = range(args[0].value, args[1].value)
+            return _cl(AstValueVector(list(result)), node)
+
+        return self.visit_call(node)
+
     def visit_compare(self, node:AstCompare):
         left = self.visit(node.left)
         right = self.visit(node.right)
@@ -208,6 +235,25 @@ class Simplifier(TransformVisitor):
             return node.clone(value=value)
         self.define_name(node.name, value)
         return AstBody([])
+
+    def visit_for(self, node: AstFor):
+        source = self.visit(node.source)
+        if is_vector(source):
+            items = []
+            for item in source:
+                items.append(AstDef(node.target, item))
+                items.append(node.body)
+            return self.visit(makeBody(items))
+        else:
+            src_type = self.get_type(source)
+            if isinstance(src_type, ppl_types.SequenceType) and src_type.size is not None:
+                items = []
+                for i in range(src_type.size):
+                    items.append(AstDef(node.target, makeSubscript(source, i)))
+                    items.append(node.body)
+                return self.visit(makeBody(items))
+
+        raise RuntimeError("cannot unroll the for-loop [line {}]".format(getattr(node, 'lineno', '?')))
 
     def visit_if(self, node: AstIf):
         test = self.visit(node.test)

@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 20. Mar 2018, Tobias Kohn
+# 21. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 import enum
@@ -642,6 +642,11 @@ class AstCall(AstNode):
             name = self.function.original_name
             if '.' in name:
                 return name[:name.index('.')]
+        elif isinstance(self.function, AstAttribute):
+            if isinstance(self.function.base, AstSymbol):
+                return self.function.base.name
+            elif isinstance(self.function.base, AstNamespace):
+                return self.function.base.name
         return None
 
     @property
@@ -1141,11 +1146,14 @@ class AstSubscript(AstNode):
 
 class AstSymbol(AstLeaf):
 
-    def __init__(self, name:str, import_source:Optional[str]=None, protected:bool=False, node=None, predef=False):
+    def __init__(self, name:str, import_source:Optional[str]=None, protected:bool=False, node=None, predef=False,
+                 original_name:Optional[str]=None):
+        if original_name is None:
+            original_name = name
         self.name = name
         self.import_source = import_source
         self.protected = protected
-        self.original_name = name
+        self.original_name = original_name
         self.symbol = None
         self.node = node
         self.predef = predef
