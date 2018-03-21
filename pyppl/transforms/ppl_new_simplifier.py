@@ -7,11 +7,8 @@
 # 21. Mar 2018, Tobias Kohn
 #
 from ast import copy_location as _cl
-from .. import ppl_namespaces
 from ..ppl_ast_annotators import *
 from ..aux.ppl_transform_visitor import TransformVisitor
-from ..ppl_branch_scopes import BranchScopeVisitor
-from ..transforms import ppl_var_substitutor
 from ..types import ppl_types, ppl_type_inference
 
 
@@ -268,6 +265,40 @@ class Simplifier(TransformVisitor):
         if is_empty(if_node) and is_empty(else_node):
             return test
         return node.clone(test=test, if_node=if_node, else_node=else_node)
+
+    def visit_list_for(self, node:AstListFor):
+        source = self.visit(node.source)
+        if is_vector(source):
+            src_len = len(source)
+        else:
+            src_type = self.get_type(source)
+            if isinstance(src_type, ppl_types.SequenceType):
+                src_len = src_type.size
+            else:
+                src_len = None
+
+        if node.test is None:
+            if node.target == '_' and src_len is not None:
+                if isinstance(node.expr, AstSample) and node.expr.size is None:
+                    return self.visit(node.expr.clone(size=AstValue(src_len)))
+                else:
+                    return self.visit(_cl(makeVector([node.expr for _ in range(src_len)]), node))
+
+            if is_vector(source):
+                items = []
+                for item in source:
+                    items.append(AstDef(node.target, item))
+                    items.append(node.expr)
+                return self.visit(makeVector(items))
+
+            elif src_len is not None:
+                items = []
+                for i in range(src_len):
+                    items.append(AstDef(node.target, makeSubscript(source, i)))
+                    items.append(node.expr)
+                return self.visit(makeVector(items))
+
+        raise RuntimeError("cannot unroll the for-loop [line {}]".format(getattr(node, 'lineno', '?')))
 
     def visit_subscript(self, node: AstSubscript):
         base = self.visit(node.base)

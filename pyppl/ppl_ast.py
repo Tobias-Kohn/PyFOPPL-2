@@ -1530,7 +1530,7 @@ def makeListFor(target, source, expr, test=None):
         tmp = generate_temp_var()
         i = len(target)
         while i > 0:
-            i -= 0
+            i -= 1
             expr = AstLet(target[i], makeSubscript(tmp, i), expr)
         target = tmp
     return AstListFor(target, source, expr, test)

@@ -59,7 +59,6 @@ def parse(source:str, *, simplify:bool=True, language:Optional[str]=None, namesp
         if len(raw_sim.imports) > 0:
             result = ppl_ast.makeBody([ppl_ast.AstImport(module_name=module) for module in raw_sim.imports], result)
 
-
     if simplify and result is not None:
         result = ppl_static_assignments.StaticAssignments().visit(result)
         result = ppl_new_simplifier.Simplifier().visit(result)
