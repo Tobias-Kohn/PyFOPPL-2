@@ -81,9 +81,13 @@ class GraphGenerator(ScopedVisitor):
     def _visit_items(self, items):
         result = []
         parents = set()
-        for item, parent in (self.visit(item) for item in items):
-            result.append(item)
-            parents = set.union(parents, parent)
+        for _item in (self.visit(item) for item in items):
+            if _item is not None:
+                item, parent = _item
+                result.append(item)
+                parents = set.union(parents, parent)
+            else:
+                result.append(None)
         return result, parents
 
     def visit_node(self, node: AstNode):
@@ -184,6 +188,11 @@ class GraphGenerator(ScopedVisitor):
         else:
             test = None
         return AstListFor(node.target, source, expr, test), parents
+
+    def visit_multi_slice(self, node: AstMultiSlice):
+        items, parents = self._visit_items(node.indices)
+        result = node.clone(indices=items)
+        return result, parents
 
     def visit_observe(self, node: AstObserve):
         dist, d_parents = self.visit(node.dist)
