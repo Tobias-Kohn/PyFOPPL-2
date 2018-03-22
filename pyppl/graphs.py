@@ -87,6 +87,7 @@ class GraphNode(object):
 
 ####################################################################################################
 
+__condition_node_counter = 1
 
 class ConditionNode(GraphNode):
     """
@@ -103,10 +104,13 @@ class ConditionNode(GraphNode):
                  condition: str,
                  function: Optional[str]=None,
                  op: Optional[str]=None):
+        global __condition_node_counter
         super().__init__(name, ancestors)
         self.condition = condition
         self.function = function
         self.op = op
+        self.bit_index = __condition_node_counter
+        __condition_node_counter *= 2
         for a in ancestors:
             if isinstance(a, Vertex):
                 a.add_dependent_condition(self)
@@ -116,6 +120,17 @@ class ConditionNode(GraphNode):
 
     def get_code(self):
         return self.condition
+
+    def is_false_from_bit_vector(self, bit_vector):
+        return (bit_vector & self.bit_index) == 0
+
+    def is_true_from_bit_vector(self, bit_vector):
+        return (bit_vector & self.bit_index) > 0
+
+    def update_bit_vector(self, state, bit_vector):
+        if state[self.name] is True:
+            bit_vector |= self.bit_index
+        return bit_vector
 
 
 class DataNode(GraphNode):
