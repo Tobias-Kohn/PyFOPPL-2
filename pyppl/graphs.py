@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 20. Mar 2018, Tobias Kohn
+# 22. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from . import distributions
@@ -179,7 +179,7 @@ class Vertex(GraphNode):
         self.distribution_code = distribution_code
         self.distribution_func = distribution_func
         self.distribution_name = distribution_name
-        self.distribution_type = distributions.get_distribution_for_name(distribution_name)
+        self.distribution_type = distributions.get_distribution_for_name(distribution_name).distribution_type
         self.observation = observation
         self.observation_value = observation_value
         self.line_number = line_number
@@ -190,6 +190,7 @@ class Vertex(GraphNode):
         args = {
             "Dist-Code": self.distribution_code,
             "Dist-Name": self.distribution_name,
+            "Dist-Type": self.distribution_type,
             "Sample-Size": self.sample_size,
         }
         if self.observation is not None:
@@ -228,11 +229,11 @@ class Vertex(GraphNode):
 
     @property
     def is_continuous(self):
-        return self.distribution_type == str(distributions.DistributionType.CONTINUOUS)
+        return self.distribution_type == distributions.DistributionType.CONTINUOUS
 
     @property
     def is_discrete(self):
-        return self.distribution_type == str(distributions.DistributionType.DISCRETE)
+        return self.distribution_type == distributions.DistributionType.DISCRETE
 
     @property
     def is_observed(self):
