@@ -51,10 +51,23 @@ class GraphNode(object):
         return self.name[-3:]
 
     def create_repr(self, caption: str, **fields):
+
+        def fmt_field(key):
+            value = fields[key]
+            if value is None:
+                return '-'
+            elif type(value) in (list, set, tuple) and all([isinstance(item, GraphNode) for item in value]):
+                return ', '.join([item.name for item in value])
+            elif type(value) in (list, set, tuple) and \
+                all([type(item) is tuple and isinstance(item[0], GraphNode) for item in value]):
+                return ', '.join(['{}={}'.format(item[0].name, item[1]) for item in value])
+            else:
+                return value
+
         if len(fields) > 0:
             key_len = max(max([len(key) for key in fields]), 9)
             fmt = "  {:" + str(key_len+2) + "}{}"
-            result = [fmt.format(key+':', fields[key]) for key in fields if fields[key] is not None]
+            result = [fmt.format(key+':', fmt_field(key)) for key in fields if fields[key] is not None]
         else:
             fmt = "  {:11}{}"
             result = []
@@ -188,14 +201,16 @@ class Vertex(GraphNode):
 
     def __repr__(self):
         args = {
-            "Dist-Code": self.distribution_code,
-            "Dist-Name": self.distribution_name,
-            "Dist-Type": self.distribution_type,
+            "Conditions":  self.conditions,
+            "Dist-Code":   self.distribution_code,
+            "Dist-Name":   self.distribution_name,
+            "Dist-Type":   self.distribution_type,
             "Sample-Size": self.sample_size,
         }
         if self.observation is not None:
             args["Observation"] = self.observation
-        return self.create_repr("Vertex", **args)
+        title = "Observe" if self.observation is not None else "Sample"
+        return self.create_repr("Vertex {} [{}]".format(self.name, title), **args)
 
     def get_code(self, **flags):
         if self.distribution_func is not None and self.distribution_args is not None:
@@ -204,6 +219,18 @@ class Vertex(GraphNode):
                 args.append("{}={}".format(key, flags[key]))
             return "{}({})".format(self.distribution_func, ', '.join(args))
         return self.distribution_code
+
+    def get_cond_code(self):
+        if self.conditions is not None and len(self.conditions) > 0:
+            result = []
+            for cond, truth_value in self.conditions:
+                if truth_value:
+                    result.append(cond.get_code())
+                else:
+                    result.append('not ' + cond.get_code())
+            return "if {}:\n\t".format(' and '.join(result))
+        else:
+            return None
 
     def add_dependent_condition(self, cond: ConditionNode):
         self.dependent_conditions.add(cond)
@@ -242,3 +269,7 @@ class Vertex(GraphNode):
     @property
     def is_sampled(self):
         return self.observation is None
+
+    @property
+    def has_conditions(self):
+        return self.conditions is not None and len(self.conditions) > 0

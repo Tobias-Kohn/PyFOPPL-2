@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 20. Mar 2018, Tobias Kohn
+# 22. Mar 2018, Tobias Kohn
 #
 import datetime
 from ..graphs import *
@@ -75,6 +75,7 @@ class GraphCodeGenerator(object):
             "\tC = '\\n'.join(sorted([repr(v) for v in self.conditionals])) if len(self.conditionals) > 0 else '  -'\n" \
             "\tD = '\\n'.join([repr(u) for u in self.data]) if len(self.data) > 0 else '  -'\n" \
             "\tgraph = 'Vertices V:\\n{V}\\nArcs A:\\n  {A}\\n\\nConditions C:\\n{C}\\n\\nData D:\\n{D}\\n'.format(V=V, A=A, C=C, D=D)\n" \
+            "\tgraph = '#Vertices: {}, #Arcs: {}\\n'.format(len(self.vertices), len(self.arcs)) + graph\n" \
             "\treturn graph\n"
         return s
 
@@ -122,7 +123,11 @@ class GraphCodeGenerator(object):
                 if code != distribution:
                     logpdf_code.append(code)
                     distribution = code
-                logpdf_code.append("log_pdf += dst_.log_pdf({})".format(name))
+                cond_code = node.get_cond_code()
+                if cond_code is not None:
+                    logpdf_code.append(cond_code + "log_pdf += dst_.log_pdf({})".format(name))
+                else:
+                    logpdf_code.append("log_pdf += dst_.log_pdf({})".format(name))
 
             elif not isinstance(node, DataNode):
                 code = "{} = {}".format(name, node.get_code())
@@ -145,7 +150,11 @@ class GraphCodeGenerator(object):
                 if code != distribution:
                     logpdf_code.append(code)
                     distribution = code
-                logpdf_code.append("log_pdf += dst_.log_pdf({})".format(name))
+                cond_code = node.get_cond_code()
+                if cond_code is not None:
+                    logpdf_code.append(cond_code + "log_pdf += dst_.log_pdf({})".format(name))
+                else:
+                    logpdf_code.append("log_pdf += dst_.log_pdf({})".format(name))
 
             elif not isinstance(node, DataNode):
                 code = "{} = {}".format(name, node.get_code())
