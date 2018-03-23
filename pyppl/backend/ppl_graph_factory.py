@@ -12,6 +12,20 @@ from .ppl_code_generator import CodeGenerator
 from .ppl_graph_codegen import GraphCodeGenerator
 
 
+class _ConditionCollector(Visitor):
+
+    __visit_children_first__ = True
+
+    def __init__(self):
+        super().__init__()
+        self.cond_nodes = set()
+
+    def visit_symbol(self, node: AstSymbol):
+        if isinstance(node.node, ConditionNode):
+            self.cond_nodes.add(node.node)
+        return self.visit_node(node)
+
+
 class GraphFactory(object):
 
     def __init__(self, code_generator=None):
@@ -72,9 +86,12 @@ class GraphFactory(object):
         d_code = self._generate_code_for_node(dist)
         v_code = self._generate_code_for_node(value)
         obs_value = value.value if is_value(value) else None
+        cc = _ConditionCollector()
+        cc.visit(dist)
         result = Vertex(name, ancestors=parents, distribution_code=d_code, distribution_name=_get_dist_name(dist),
                         distribution_args=args, distribution_func=func, observation=v_code,
-                        observation_value=obs_value, conditions=conditions)
+                        observation_value=obs_value, conditions=conditions,
+                        condition_ancestors=cc.cond_nodes if len(cc.cond_nodes) > 0 else None)
         self.nodes.append(result)
         return result
 

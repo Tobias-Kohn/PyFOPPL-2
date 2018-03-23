@@ -191,6 +191,7 @@ class Vertex(GraphNode):
 
     def __init__(self, name: str, *,
                  ancestors: Optional[set]=None,
+                 condition_ancestors: Optional[set]=None,
                  conditions: Optional[set]=None,
                  distribution_code: str,
                  distribution_args: Optional[list]=None,
@@ -203,6 +204,7 @@ class Vertex(GraphNode):
                  line_number: int = -1):
         super().__init__(name, ancestors)
         self.distribution_args = distribution_args
+        self.condition_ancestors = condition_ancestors
         self.conditions = conditions
         self.distribution_code = distribution_code
         self.distribution_func = distribution_func
@@ -214,10 +216,14 @@ class Vertex(GraphNode):
         self.line_number = line_number
         self.sample_size = sample_size
         self.dependent_conditions = set()
+        if conditions is not None:
+            for cond, truth_value in conditions:
+                self.condition_ancestors.add(cond)
 
     def __repr__(self):
         args = {
             "Conditions":  self.conditions,
+            "Cond-Ancs.":  self.condition_ancestors,
             "Dist-Code":   self.distribution_code,
             "Dist-Name":   self.distribution_name,
             "Dist-Type":   self.distribution_type,
