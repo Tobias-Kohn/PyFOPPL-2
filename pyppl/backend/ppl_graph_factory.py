@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 22. Mar 2018, Tobias Kohn
+# 23. Mar 2018, Tobias Kohn
 #
 from ..ppl_ast import *
 from ..graphs import *
@@ -21,6 +21,7 @@ class GraphFactory(object):
         self._counter = 30000
         self.nodes = []
         self.code_generator = code_generator
+        self.cond_nodes_map = {}
 
     def _generate_code_for_node(self, node: AstNode):
         return self.code_generator.visit(node)
@@ -36,12 +37,18 @@ class GraphFactory(object):
     def create_condition_node(self, test: AstNode, parents: set):
         name = self.generate_symbol('cond_')
         code = self._generate_code_for_node(test)
+        if code in self.cond_nodes_map:
+            return self.cond_nodes_map[code]
         if isinstance(test, AstCompare) and is_zero(test.right) and test.second_right is None:
             result = ConditionNode(name, ancestors=parents, condition=code,
                                    function=self._generate_code_for_node(test.left), op=test.op)
+        elif isinstance(test, AstCall) and test.function_name.startswith('torch.') and is_zero(test.right):
+            result = ConditionNode(name, ancestors=parents, condition=code,
+                                   function=self._generate_code_for_node(test.left), op=test.function_name)
         else:
             result = ConditionNode(name, ancestors=parents, condition=code)
         self.nodes.append(result)
+        self.cond_nodes_map[code] = result
         return result
 
     def create_data_node(self, data: AstNode, parents: Optional[set]=None):

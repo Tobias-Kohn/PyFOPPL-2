@@ -10,7 +10,7 @@ License: MIT
 # from pyfoppl.foppl import *  # ignored by the compiler, but keeps the IDE happy
 import torch
 
-x1  = sample(normal(torch.tensor([0,2]), torch.tensor([1,4])))
+x1 = sample(normal(torch.tensor([0,2]), torch.tensor([1,4])))
 
 x2 = sample(normal(torch.tensor([0,5]), torch.tensor([2,4])))
 
