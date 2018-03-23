@@ -224,7 +224,7 @@ class GraphGenerator(ScopedVisitor):
         else:
             size = 1
             parents = d_parents
-        node = self.factory.create_sample_node(dist, size, parents)
+        node = self.factory.create_sample_node(dist, size, parents, original_name=getattr(node, 'original_name', None))
         self.nodes.append(node)
         return AstSymbol(node.name, node=node), { node }
 

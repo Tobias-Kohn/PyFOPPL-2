@@ -78,7 +78,7 @@ class GraphFactory(object):
         self.nodes.append(result)
         return result
 
-    def create_sample_node(self, dist: AstNode, size: int, parents: set):
+    def create_sample_node(self, dist: AstNode, size: int, parents: set, original_name: Optional[str]=None):
         if isinstance(dist, AstCall):
             func = dist.function_name
             args = [self._generate_code_for_node(arg) for arg in dist.args]
@@ -89,7 +89,7 @@ class GraphFactory(object):
         name = self.generate_symbol('x')
         code = self._generate_code_for_node(dist)
         result = Vertex(name, ancestors=parents, distribution_code=code, distribution_name=_get_dist_name(dist),
-                        distribution_args=args, distribution_func=func, sample_size=size)
+                        distribution_args=args, distribution_func=func, sample_size=size, original_name=original_name)
         self.nodes.append(result)
         return result
 

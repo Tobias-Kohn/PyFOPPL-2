@@ -18,6 +18,7 @@ class AstNode(object):
     """
 
     _attributes = { 'col_offset', 'lineno' }
+    original_name = None
     tag = None
 
     def get_fields(self):
