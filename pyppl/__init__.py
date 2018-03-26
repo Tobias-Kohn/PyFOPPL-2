@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 07. Feb 2018, Tobias Kohn
-# 19. Mar 2018, Tobias Kohn
+# 26. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from . import distributions, parser
@@ -23,7 +23,7 @@ def compile_model(source, *,
     return gg.generate_model(base_class=base_class, imports=imports)
 
 
-def compile_model_from_file(filename:str, *,
+def compile_model_from_file(filename: str, *,
                             language: Optional[str]=None,
                             imports=None,
                             base_class: Optional[str]=None):

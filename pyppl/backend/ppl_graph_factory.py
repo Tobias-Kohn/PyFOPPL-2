@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 23. Mar 2018, Tobias Kohn
+# 26. Mar 2018, Tobias Kohn
 #
 from ..ppl_ast import *
 from ..graphs import *
@@ -56,9 +56,10 @@ class GraphFactory(object):
         if isinstance(test, AstCompare) and is_zero(test.right) and test.second_right is None:
             result = ConditionNode(name, ancestors=parents, condition=code,
                                    function=self._generate_code_for_node(test.left), op=test.op)
-        elif isinstance(test, AstCall) and test.function_name.startswith('torch.') and is_zero(test.right):
+        elif isinstance(test, AstCall) and test.function_name.startswith('torch.') and is_number(test.right):
             result = ConditionNode(name, ancestors=parents, condition=code,
-                                   function=self._generate_code_for_node(test.left), op=test.function_name)
+                                   function=self._generate_code_for_node(test.left), op=test.function_name,
+                                   compare_value=test.right.value)
         else:
             result = ConditionNode(name, ancestors=parents, condition=code)
         self.nodes.append(result)

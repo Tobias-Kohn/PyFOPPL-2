@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 23. Mar 2018, Tobias Kohn
+# 26. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from . import distributions
@@ -103,11 +103,13 @@ class ConditionNode(GraphNode):
     def __init__(self, name: str, *, ancestors: Optional[set]=None,
                  condition: str,
                  function: Optional[str]=None,
-                 op: Optional[str]=None):
+                 op: Optional[str]=None,
+                 compare_value: Optional[float]=None):
         super().__init__(name, ancestors)
         self.condition = condition
         self.function = function
         self.op = op
+        self.compare_value = compare_value
         self.bit_index = self.__class__.__condition_node_counter
         self.__class__.__condition_node_counter *= 2
         for a in ancestors:
@@ -115,7 +117,8 @@ class ConditionNode(GraphNode):
                 a.add_dependent_condition(self)
 
     def __repr__(self):
-        return self.create_repr("Condition", Condition=self.condition, Function=self.function, Op=self.op)
+        return self.create_repr("Condition", Condition=self.condition, Function=self.function, Op=self.op,
+                                CompareValue=self.compare_value)
 
     def get_code(self):
         return self.condition
