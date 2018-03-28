@@ -10,6 +10,7 @@ from ..ppl_ast import *
 from ..graphs import *
 from .ppl_code_generator import CodeGenerator
 from .ppl_graph_codegen import GraphCodeGenerator
+from .. import distributions
 
 
 class _ConditionCollector(Visitor):
@@ -80,11 +81,16 @@ class GraphFactory(object):
         return result
 
     def create_observe_node(self, dist: AstNode, value: AstNode, parents: set, conditions: set):
+        arg_names = None
         if isinstance(dist, AstCall):
             func = dist.function_name
             args = [self._generate_code_for_node(arg) for arg in dist.args]
-            args = dist.add_keywords_to_args(args)
+            # args = dist.add_keywords_to_args(args)
             trans = dist.get_keyword_arg_value("transform")
+            distr = distributions.get_distribution_for_name(func)
+            if distr is not None:
+                if 0 < dist.pos_arg_count <= len(distr.params):
+                    arg_names = distr.params[:dist.pos_arg_count] + dist.keywords
         else:
             func = None
             args = None
@@ -97,7 +103,7 @@ class GraphFactory(object):
         cc.visit(dist)
         result = Vertex(name, ancestors=parents, distribution_code=d_code, distribution_name=_get_dist_name(dist),
                         distribution_args=args, distribution_func=func,
-                        distribution_transform=trans,
+                        distribution_transform=trans, distribution_arg_names=arg_names,
                         observation=v_code,
                         observation_value=obs_value, conditions=conditions,
                         condition_ancestors=cc.cond_nodes if len(cc.cond_nodes) > 0 else None)
@@ -105,11 +111,16 @@ class GraphFactory(object):
         return result
 
     def create_sample_node(self, dist: AstNode, size: int, parents: set, original_name: Optional[str]=None):
+        arg_names = None
         if isinstance(dist, AstCall):
             func = dist.function_name
             args = [self._generate_code_for_node(arg) for arg in dist.args]
-            args = dist.add_keywords_to_args(args)
+            # args = dist.add_keywords_to_args(args)
             trans = dist.get_keyword_arg_value("transform")
+            distr = distributions.get_distribution_for_name(func)
+            if distr is not None:
+                if 0 < dist.pos_arg_count <= len(distr.params):
+                    arg_names = distr.params[:dist.pos_arg_count] + dist.keywords
         else:
             func = None
             args = None
@@ -118,6 +129,7 @@ class GraphFactory(object):
         code = self._generate_code_for_node(dist)
         result = Vertex(name, ancestors=parents, distribution_code=code, distribution_name=_get_dist_name(dist),
                         distribution_args=args, distribution_func=func, distribution_transform=trans,
+                        distribution_arg_names=arg_names,
                         sample_size=size, original_name=original_name)
         self.nodes.append(result)
         return result
