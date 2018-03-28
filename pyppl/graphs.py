@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 26. Mar 2018, Tobias Kohn
+# 28. Mar 2018, Tobias Kohn
 #
 from typing import Optional
 from . import distributions
@@ -200,6 +200,7 @@ class Vertex(GraphNode):
                  distribution_args: Optional[list]=None,
                  distribution_func: Optional[str]=None,
                  distribution_name: str,
+                 distribution_transform=None,
                  observation: Optional[str]=None,
                  observation_value: Optional=None,
                  original_name: Optional[str]=None,
@@ -213,6 +214,7 @@ class Vertex(GraphNode):
         self.distribution_func = distribution_func
         self.distribution_name = distribution_name
         self.distribution_type = distributions.get_distribution_for_name(distribution_name).distribution_type
+        self.distribution_transform = distribution_transform
         self.observation = observation
         self.observation_value = observation_value
         self.original_name = original_name
@@ -230,6 +232,7 @@ class Vertex(GraphNode):
             "Dist-Code":   self.distribution_code,
             "Dist-Name":   self.distribution_name,
             "Dist-Type":   self.distribution_type,
+            "Dist-Transform": self.distribution_transform,
             "Sample-Size": self.sample_size,
             "Orig. Name":  self.original_name,
         }

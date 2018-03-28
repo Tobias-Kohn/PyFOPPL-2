@@ -80,9 +80,11 @@ class GraphFactory(object):
             func = dist.function_name
             args = [self._generate_code_for_node(arg) for arg in dist.args]
             args = dist.add_keywords_to_args(args)
+            trans = dist.get_keyword_arg_value("transform")
         else:
             func = None
             args = None
+            trans = None
         name = self.generate_symbol('y')
         d_code = self._generate_code_for_node(dist)
         v_code = self._generate_code_for_node(value)
@@ -90,7 +92,9 @@ class GraphFactory(object):
         cc = _ConditionCollector()
         cc.visit(dist)
         result = Vertex(name, ancestors=parents, distribution_code=d_code, distribution_name=_get_dist_name(dist),
-                        distribution_args=args, distribution_func=func, observation=v_code,
+                        distribution_args=args, distribution_func=func,
+                        distribution_transform=trans,
+                        observation=v_code,
                         observation_value=obs_value, conditions=conditions,
                         condition_ancestors=cc.cond_nodes if len(cc.cond_nodes) > 0 else None)
         self.nodes.append(result)
@@ -101,13 +105,16 @@ class GraphFactory(object):
             func = dist.function_name
             args = [self._generate_code_for_node(arg) for arg in dist.args]
             args = dist.add_keywords_to_args(args)
+            trans = dist.get_keyword_arg_value("transform")
         else:
             func = None
             args = None
+            trans = None
         name = self.generate_symbol('x')
         code = self._generate_code_for_node(dist)
         result = Vertex(name, ancestors=parents, distribution_code=code, distribution_name=_get_dist_name(dist),
-                        distribution_args=args, distribution_func=func, sample_size=size, original_name=original_name)
+                        distribution_args=args, distribution_func=func, distribution_transform=trans,
+                        sample_size=size, original_name=original_name)
         self.nodes.append(result)
         return result
 
