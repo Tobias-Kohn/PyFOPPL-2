@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 26. Mar 2018, Tobias Kohn
+# 28. Mar 2018, Tobias Kohn
 #
 from ..ppl_ast import *
 from ..graphs import *
@@ -36,6 +36,7 @@ class GraphFactory(object):
         self.nodes = []
         self.code_generator = code_generator
         self.cond_nodes_map = {}
+        self.data_nodes_cache = {}
 
     def _generate_code_for_node(self, node: AstNode):
         return self.code_generator.visit(node)
@@ -69,10 +70,13 @@ class GraphFactory(object):
     def create_data_node(self, data: AstNode, parents: Optional[set]=None):
         if parents is None:
             parents = set()
-        name = self.generate_symbol('data_')
         code = self._generate_code_for_node(data)
+        if code in self.data_nodes_cache:
+            return self.data_nodes_cache[code]
+        name = self.generate_symbol('data_')
         result = DataNode(name, ancestors=parents, data=code)
         self.nodes.append(result)
+        self.data_nodes_cache[code] = result
         return result
 
     def create_observe_node(self, dist: AstNode, value: AstNode, parents: set, conditions: set):
