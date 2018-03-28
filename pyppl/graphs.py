@@ -215,7 +215,8 @@ class Vertex(GraphNode):
         self.distribution_code = distribution_code
         self.distribution_func = distribution_func
         self.distribution_name = distribution_name
-        self.distribution_type = distributions.get_distribution_for_name(distribution_name).distribution_type
+        distr = distributions.get_distribution_for_name(distribution_name)
+        self.distribution_type = distr.distribution_type if distr is not None else None
         self.distribution_transform = distribution_transform
         self.observation = observation
         self.observation_value = observation_value
