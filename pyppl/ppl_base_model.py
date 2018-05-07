@@ -68,7 +68,3 @@ class base_model(ABC):
     @abstractmethod
     def gen_prior_samples(self):
         return NotImplementedError
-
-#    @abstractmethod
-#    def gen_prior_samples_transformed(self):
-#        return NotImplementedError
