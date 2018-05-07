@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod, ABCMeta
 
 
 class base_model(ABC):
+
     @abstractmethod
     def get_vertices(self):
         '''
@@ -23,6 +24,7 @@ class base_model(ABC):
     @abstractmethod
     def get_vertices_names(self):
         return NotImplementedError
+
     @abstractmethod
     def get_arcs(self):
         return NotImplementedError
@@ -65,8 +67,4 @@ class base_model(ABC):
 
     @abstractmethod
     def gen_prior_samples(self):
-        return NotImplementedError
-
-    @abstractmethod
-    def gen_prior_samples_transformed(self):
         return NotImplementedError

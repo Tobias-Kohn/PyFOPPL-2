@@ -4,9 +4,10 @@
 # License: MIT (see LICENSE.txt)
 #
 # 12. Mar 2018, Tobias Kohn
-# 23. Mar 2018, Tobias Kohn
+# 07. May 2018, Tobias Kohn
 #
 import datetime
+import importlib
 from ..graphs import *
 from ..ppl_ast import *
 
@@ -101,6 +102,30 @@ class GraphCodeGenerator(object):
             imports = self.imports + "\n" + imports
         if base_class is None:
             base_class = ''
+
+        if '.' in base_class:
+            idx = base_class.rindex('.')
+            base_module = base_class[:idx]
+            try:
+                importlib.import_module(base_module)
+                base_class = base_class[idx+1:]
+                imports = "from {} import {}\n".format(base_module, base_class) + imports
+            except:
+                pass
+
+        try:
+            graph_module = 'pyppl.aux.graph_plots'
+            m = importlib.import_module(graph_module)
+            names = [n for n in dir(m) if not n.startswith('_')]
+            if len(names) > 1:
+                names = [n for n in names if n[0].isupper()]
+            if len(names) == 1:
+                if base_class != '':
+                    base_class += ', '
+                base_class += '_' + names[0]
+                imports = "from {} import {} as _{}\n".format(graph_module, names[0], names[0]) + imports
+        except ModuleNotFoundError:
+            pass
 
         imports = self._complete_imports(imports) + imports
 
