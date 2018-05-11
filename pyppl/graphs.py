@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 28. Mar 2018, Tobias Kohn
+# 11. May 2018, Tobias Kohn
 #
 from typing import Optional
 from . import distributions
@@ -194,7 +194,7 @@ class Vertex(GraphNode):
 
     def __init__(self, name: str, *,
                  ancestors: Optional[set]=None,
-                 condition_ancestors: Optional[set]=None,
+                 condition_nodes: Optional[set]=None,
                  conditions: Optional[set]=None,
                  distribution_args: Optional[list]=None,
                  distribution_arg_names: Optional[list]=None,
@@ -208,7 +208,7 @@ class Vertex(GraphNode):
                  sample_size: int = 1,
                  line_number: int = -1):
         super().__init__(name, ancestors)
-        self.condition_ancestors = condition_ancestors
+        self.condition_nodes = condition_nodes
         self.conditions = conditions
         self.distribution_args = distribution_args
         self.distribution_arg_names = distribution_arg_names
@@ -225,8 +225,14 @@ class Vertex(GraphNode):
         self.sample_size = sample_size
         self.dependent_conditions = set()
         if conditions is not None:
+            if self.condition_nodes is None:
+                self.condition_nodes = set()
             for cond, truth_value in conditions:
-                self.condition_ancestors.add(cond)
+                self.condition_nodes.add(cond)
+        self.condition_ancestors = set()
+        if self.condition_nodes is not None:
+            for cond in self.condition_nodes:
+                self.condition_ancestors = set.union(self.condition_ancestors, cond.ancestors)
         if self.distribution_args is not None and self.distribution_arg_names is not None and \
             len(self.distribution_args) == len(self.distribution_arg_names):
             self.distribution_arguments = { n: v for n, v in zip(self.distribution_arg_names, self.distribution_args) }
@@ -237,6 +243,7 @@ class Vertex(GraphNode):
         args = {
             "Conditions":  self.conditions,
             "Cond-Ancs.":  self.condition_ancestors,
+            "Cond-Nodes":  self.condition_nodes,
             "Dist-Args":   self.distribution_arguments,
             "Dist-Code":   self.distribution_code,
             "Dist-Name":   self.distribution_name,

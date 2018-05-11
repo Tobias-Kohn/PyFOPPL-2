@@ -4,7 +4,7 @@
 # License: MIT (see LICENSE.txt)
 #
 # 20. Dec 2017, Tobias Kohn
-# 07. May 2018, Tobias Kohn
+# 11. May 2018, Tobias Kohn
 #
 # We try to import `networkx` and `matplotlib`. If present, these packages can be used to get a visual
 # representation of the graph. But neither of these packages is actually needed.
@@ -67,7 +67,7 @@ class GraphPlotter(object):
             for v in self.vertices:
                 _nx.draw_networkx_edges(G, pos, arrows=True,
                                         edgelist=[(a.display_name, v.display_name) for a in v.ancestors])
-                if v.condition_ancestors is not None:
+                if v.condition_ancestors is not None and len(v.condition_ancestors) > 0:
                     _nx.draw_networkx_edges(G, pos, arrows=True,
                                             style='dashed',
                                             edge_color='g',
